@@ -28,5 +28,6 @@ Cargo.lock
 **/tex_temp/**
 .venv/*
 upi.json
+TODO.md
 
 **/__pycache__/**
