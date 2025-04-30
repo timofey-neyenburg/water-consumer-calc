@@ -188,7 +188,7 @@ def build_document_text(
 \\hline \n\
 \\multicolumn{1}{|l|}{\\multirow{3}{*}{Водопотребители}} & \\multicolumn{1}{l|}{\\multirow{3}{*}{Измеритель}} & \\multicolumn{1}{l|}{\\multirow{3}{*}{Количество потребителей}} & \\multicolumn{4}{l|}{Норма расхода воды, л} & \\multicolumn{2}{l|}{Расход воды прибором, л/с (л/ч)} \\\\ \\cline{4-9}  \n\
 \\multicolumn{1}{|l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{2}{l|}{В сутки наибольшего потребления} & \\multicolumn{2}{l|}{В час наибольшего потребления} & \\multicolumn{1}{l|}{\\multirow{2}{*}{Общий (холодной и горячей) $q^{tot}_o$ ($q^{tot}_{o, hr}$)}} & \\multicolumn{1}{l|}{\\multirow{2}{*}{Холодной или горячей $q^c_o$, $q^h_o$, $q^c_{o, hr}$, $q^h_{o, hr}$}} \\\\ \\cline{4-7}  \n\
-\\multicolumn{1}{|l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{g} & \\multicolumn{1}{l|}{h} & \\multicolumn{1}{l|}{i} & \\multicolumn{1}{l|}{j} & \\multicolumn{1}{l|}{}& \\multicolumn{1}{l|}{} \\\\ \\hline \n\
+\\multicolumn{1}{|l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{Общая (в том числе горячей) $q^{tot}_u$} & \\multicolumn{1}{l|}{Горячей $q^h_u$} & \\multicolumn{1}{l|}{Общая (в том числе горячей) $q^{tot}_{hr, u}$} & \\multicolumn{1}{l|}{Горячей $q^{h}_{hr, u}$} & \\multicolumn{1}{l|}{}& \\multicolumn{1}{l|}{} \\\\ \\hline \n\
   & & & & & & & & \n
 \\end{tabular} \n\
 \\end{table} \n\
