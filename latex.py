@@ -150,4 +150,58 @@ def format_string(string: str, values: dict):
     return string
 
 
+def build_document_text(
+    project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
+    objects: list[tuple[str, int, str]] = [("Жилая часть", 14507, "чел.")],
+):
+    txt = """
+\\documentclass{article} \n\
+\\usepackage[T2A]{fontenc} \n\
+\\usepackage[russian,english]{babel} \n\
+\\usepackage[margin=1.5cm]{geometry} \n\
+\\usepackage{multirow} \n\
+\\usepackage{times} \n\
+
+\\begin{document} \n"""
+
+    txt += (
+        (
+            "\\section*{<project_name>}\\\\ \n"
+            "\\section*{Расчет расходов воды и стоков.}\\\\\\\\ \n"
+            "Согласно задания на проектирование выполняем расчет расходов воды по СНиП 2.04.01-85 «Внутренний водопровод и канализация зданий».\\\\ \n"
+        )
+        .replace("<project_name>", project_name)
+    )
+
+    for ind, (name, num_of_measurers, measurer) in enumerate(objects):
+        txt += (
+            f"{ind+1}. {name} - {num_of_measurers} {measurer} \\\\ \n"
+        )
+    
+    txt += "\\section*{Норма расхода воды}"
+
+    # https://www.tablesgenerator.com/
+    txt += (
+        """
+\\begin{table}[h] \n\
+\\begin{tabular}{lllllllll} \n\
+\\hline \n\
+\\multicolumn{1}{|l|}{\\multirow{3}{*}{Водопотребители}} & \\multicolumn{1}{l|}{\\multirow{3}{*}{Измеритель}} & \\multicolumn{1}{l|}{\\multirow{3}{*}{Количество потребителей}} & \\multicolumn{4}{l|}{Норма расхода воды, л} & \\multicolumn{2}{l|}{Расход воды прибором, л/с (л/ч)} \\\\ \\cline{4-9}  \n\
+\\multicolumn{1}{|l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{2}{l|}{В сутки наибольшего потребления} & \\multicolumn{2}{l|}{В час наибольшего потребления} & \\multicolumn{1}{l|}{\\multirow{2}{*}{Общий (холодной и горячей) $q^{tot}_o$ ($q^{tot}_{o, hr}$)}} & \\multicolumn{1}{l|}{\\multirow{2}{*}{Холодной или горячей $q^c_o$, $q^h_o$, $q^c_{o, hr}$, $q^h_{o, hr}$}} \\\\ \\cline{4-7}  \n\
+\\multicolumn{1}{|l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{} & \\multicolumn{1}{l|}{g} & \\multicolumn{1}{l|}{h} & \\multicolumn{1}{l|}{i} & \\multicolumn{1}{l|}{j} & \\multicolumn{1}{l|}{}& \\multicolumn{1}{l|}{} \\\\ \\hline \n\
+  & & & & & & & & \n
+\\end{tabular} \n\
+\\end{table} \n\
+"""
+    )
+
+    txt += "\\end{document} \n"
+
+    return txt
+
+
+
 # prepare_latex("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\doc", use_thread=False)
+
+with open("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", "w", encoding="utf-8") as f:
+    f.write(build_document_text())

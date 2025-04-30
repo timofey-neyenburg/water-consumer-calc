@@ -139,7 +139,7 @@ class ProjectContext:
             "path": path,
             "last_var_num": 0,
             "vars": [],
-            "opened_tabs_tags": [],
+            "opened_tabs_tags": {},
             "variants_data": {},
         }
         app_logger.error(f"prepared app context data: {_data}")
@@ -176,32 +176,33 @@ class ProjectContext:
     def opened_tabs_tags(self):
         return self._data["opened_tabs_tags"]
 
-    @opened_tabs_tags.setter
-    def opened_tabs_tags(self, tabs: list):
-        self._data["opened_tabs_tags"] = tabs
-    
     @property
     def variants_data(self):
         return self._data["variants_data"]
 
     def add_variant(self, tag: str):
-        self._data["variants_data"][tag] = {"objects": {}}
+        if tag not in self._data["variants_data"]:
+            self._data["variants_data"][tag] = {"objects": []}
+            self.dump()
+    
+    def add_tab(self, tab_name: str, tab_id: int):
+        self._data["opened_tabs_tags"][tab_name] = tab_id
         self.dump()
     
+    def rm_tab(self, tab_name: str):
+        if tab_name in self._data["opened_tabs_tags"]:
+            del self._data["opened_tabs_tags"][tab_name]
+    
     def add_variant_object(self, variant_tag: str, object_type: str, object_type_id: int, num_of_object_visitors: int):
-        app_logger.error("SAVING VARIANT")
-        app_logger.error(variant_tag)
-        app_logger.error(self._data["variants_data"])
         if variant_tag in self._data["variants_data"]:
             cons: WaterConsumerNorms = APP_CONTEXT["WATER_CONSUMERS"][object_type_id-1]
-            self._data["variants_data"][variant_tag]["objects"][object_type] = {
+            self._data["variants_data"][variant_tag]["objects"].append({
                 "num_of_object_visitors": num_of_object_visitors,
                 "params": {
                     "id": cons.id,
                     "name": cons.name,
                 },
-            }
-            app_logger.error(self._data["variants_data"][variant_tag]["objects"][object_type])
+            })
         self.dump()
     
     def dump(self):

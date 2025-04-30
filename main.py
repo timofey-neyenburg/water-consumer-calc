@@ -106,6 +106,7 @@ def draw_consumer_card(
         dpg.delete_item(f"spacer_{cons_id}")
 
     if not draw_only:
+        print("add object")
         project_ctx.add_variant_object(variant, cons.name, cons.id, num_of_visitors)
 
     with dpg.child_window(parent=parent, height=360, width=450) as cwin:
@@ -218,8 +219,6 @@ def project_screen(project_path: str, pctx: ProjectContext):
     APP_CONTEXT["CURRENT_WIN"] = "project"
     APP_CONTEXT["CURRENT_PROJECT_PATH"] = project_path
 
-    app_logger.error("PROJECT SCREEN")
-    
     def add_variant_button():
         pctx.last_var_num = pctx.last_var_num + 1
         pctx.vars = pctx.vars + [f"вариант {pctx.last_var_num}"]
@@ -231,11 +230,31 @@ def project_screen(project_path: str, pctx: ProjectContext):
             callback=_mk_tab_opnr(f"var_win_вариант {pctx.last_var_num}")
         )
 
-    def open_variant_tab(tabname: str):
-        app_logger.debug(tabname)
-        if tabname not in pctx.opened_tabs_tags:
-            dpg.add_tab(parent="project_bar", label=tabname, tag=f"tab_{tabname}", closable=True)
-            pctx.add_variant(f"tab_{tabname}")
+    def open_variant_tab(tabname: str, open_tabs_on_startup: bool = False):
+        if not open_tabs_on_startup:
+            for tname, tid in pctx.opened_tabs_tags.items():
+                if not dpg.is_item_visible(tid):
+                    dpg.delete_item(tid)
+                    pctx.rm_tab(tname)
+
+        if not open_tabs_on_startup:
+            if tabname not in pctx.opened_tabs_tags:
+                label = "Вариант" + tabname.split()[-1]
+
+                dpg.add_tab(parent="project_bar", label=label, tag=f"tab_{tabname}", closable=True)
+                pctx.add_variant(f"tab_{tabname}")
+
+                tab_id = dpg.get_item_children("project_bar")[1][-1] # type:ignore
+                pctx.add_tab(tabname, tab_id)
+
+                variant_screen(f"tab_{tabname}", pctx)
+        else:
+            label = "Вариант" + tabname.split()[-1]
+            dpg.add_tab(parent="project_bar", label=label, tag=f"tab_{tabname}", closable=True)
+
+            tab_id = dpg.get_item_children("project_bar")[1][-1] # type:ignore
+            pctx.add_tab(tabname, tab_id)
+
             variant_screen(f"tab_{tabname}", pctx)
     
     def _mk_tab_opnr(nm: str):
@@ -244,16 +263,6 @@ def project_screen(project_path: str, pctx: ProjectContext):
             open_variant_tab(nm)
         return _open
     
-    def handle_tab_change():
-        app_logger.debug("changed")
-
-        children = dpg.get_item_children('project_bar')
-        if children is not None:
-            for tab in children[1]:
-                if not dpg.is_item_visible(tab):
-                    app_logger.debug(('this tab was closed:', tab))
-                    dpg.delete_item(tab)
-
     with dpg.window(
         label="Водопотребление",
         width=APP_CONTEXT["WIN_W"],
@@ -262,8 +271,7 @@ def project_screen(project_path: str, pctx: ProjectContext):
         on_close=_mk_handler(quit),
         tag="root_win"
     ):
-        tb = dpg.add_tab_bar(reorderable=True, tag="project_bar", callback=handle_tab_change)
-
+        tb = dpg.add_tab_bar(reorderable=True, tag="project_bar")
         with dpg.tab(parent=tb, label="Проект"):
             with dpg.group():
                 dpg.add_text("Варианты объектов:")
@@ -285,6 +293,9 @@ def project_screen(project_path: str, pctx: ProjectContext):
         if pctx.is_loaded():
             for var in pctx.vars:
                 dpg.bind_item_theme(f"var_win_{var}", var_win_style)
+        
+        for tab in pctx.opened_tabs_tags.keys():
+            open_variant_tab(tab, open_tabs_on_startup=True)
 
     dpg.set_primary_window("root_win", True)
 
@@ -320,7 +331,6 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                         callback=_mk_handler(
                             draw_consumer_card,
                             f"right_var_win_{parent_tab}",
-                            # parent_tab,
                             parent_tab,
                             project_ctx,
                         )
@@ -331,12 +341,19 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                         height=30, width=240,
                         callback=_mk_handler(create_report)
                     )
-            # cw = dpg.add_child_window(parent=mwin, tag=f"right_var_win_{parent_tab}")
+
             with dpg.child_window(parent=mwin, tag=f"right_var_win_{parent_tab}", border=False) as cw:
                 dpg.add_text("Добавленные потребители:", parent=cw)
-                for k, v in project_ctx.variants_data[parent_tab]["objects"].items():
-                    card = APP_CONTEXT["WATER_CONSUMERS"][v["params"]["id"]-1]
-                    draw_consumer_card(f"right_var_win_{parent_tab}", parent_tab, project_ctx, True, card, v["num_of_object_visitors"])
+                for object_ in project_ctx.variants_data[parent_tab]["objects"]:
+                    card = APP_CONTEXT["WATER_CONSUMERS"][object_["params"]["id"]-1]
+                    draw_consumer_card(
+                        parent=f"right_var_win_{parent_tab}",
+                        variant=parent_tab,
+                        project_ctx=project_ctx,
+                        card=card,
+                        card_num_of_visitors=object_["num_of_object_visitors"],
+                        draw_only=True,
+                    )
 
         with dpg.theme() as container_theme:
             with dpg.theme_component(dpg.mvGroup):
@@ -345,11 +362,14 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
 
             dpg.bind_item_theme(cw, container_theme)
 
+
 def _startup():
     dpg.create_context()
     dpg.create_viewport(
         title=f'waterconsumption v{__version__}',
         width=APP_CONTEXT["WIN_W"],
+        max_width=APP_CONTEXT["WIN_W"] + 100,
+        max_height=APP_CONTEXT["WIN_H"] + 100,
         min_width=APP_CONTEXT["WIN_W"],
         height=APP_CONTEXT["WIN_H"],
         min_height=APP_CONTEXT["WIN_H"],
@@ -358,6 +378,7 @@ def _startup():
         dpg.add_mouse_double_click_handler(callback=handle_double_click)
         dpg.add_mouse_move_handler(callback=handle_mouse_move_event)
         dpg.add_mouse_click_handler(callback=handle_mouse_click_event)
+
 
 def prep_font():
     with dpg.font_registry():
@@ -370,6 +391,7 @@ def prep_font():
         with dpg.font(font_path, 18, default_font=True, tag="font-ru"):
             dpg.add_font_range_hint(dpg.mvFontRangeHint_Cyrillic)
             dpg.bind_font("font-ru")
+
 
 def _finalize():
     dpg.setup_dearpygui()
