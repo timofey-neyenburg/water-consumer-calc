@@ -45,6 +45,8 @@ q0_ℎ𝑟_𝑡𝑜𝑡 – общий расход воды, л/ч, санит�
 """
 
 from enum import Enum
+import uuid
+from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 
@@ -81,7 +83,6 @@ class ConsuptionMeasurer(Enum):
 
 @dataclass
 class WaterConsumerNorms:
-    id: int
     # Водопотребители
     name: str
     # Измеритель
@@ -100,6 +101,8 @@ class WaterConsumerNorms:
     device_water_consumption_hot_or_cold: float
     # T, ч
     T: float
+    # id
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 @dataclass

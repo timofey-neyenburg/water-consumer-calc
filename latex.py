@@ -158,6 +158,53 @@ def _build_document_end() -> str:
     return txt
 
 
+def _build_result_table():
+    table = """
+\\begin{table}[h]
+\\begin{tabular}{|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|}
+\\hline
+    \\multicolumn{1}{|p{3cm}|}{
+        \\multirow{3}{3cm}{Наименование системы}
+    } &
+    \\multicolumn{9}{|p{9cm}|}{Расчетный расход} \\
+\\cline{2-10}
+    \\multicolumn{1}{|p{3cm}|}{} & 
+    \\multicolumn{3}{|p{3cm}|}{Общий расход воды} &
+    \\multicolumn{3}{|p{3cm}|}{Расход холодной воды} &
+    \\multicolumn{3}{|p{3cm}|}{Расход горячей воды} \\
+\\cline{2-10}
+    \\multicolumn{1}{|p{3cm}|}{} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} & 
+    \\multicolumn{1}{|p{1cm}|}{m} \\
+\\hline
+    \\multicolumn{1}{|p{3cm}|}{} & 
+    \\multicolumn{1}{|p{1cm}|}{1} & 
+    \\multicolumn{1}{|p{1cm}|}{2} & 
+    \\multicolumn{1}{|p{1cm}|}{3} & 
+    \\multicolumn{1}{|p{1cm}|}{4} & 
+    \\multicolumn{1}{|p{1cm}|}{5} & 
+    \\multicolumn{1}{|p{1cm}|}{6} & 
+    \\multicolumn{1}{|p{1cm}|}{7} & 
+    \\multicolumn{1}{|p{1cm}|}{8} & 
+    \\multicolumn{1}{|p{1cm}|}{9} \\
+\\hline
+\\end{tabular}
+\\end{table}\textbf{}
+"""
+
+def _build_NP_formula(a: float, b: float, c: float, res: float):
+    top_ = "{tot1}"
+    bottom_ = ""
+    return f"$NP^{top_}_{bottom_} = {a} \\cdot {b} / {c} \\cdot 3600 = {res}$"
+
+
 def build_document_text(
     project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
     objects: list[tuple[str, int, str]] = [("Жилая часть", 14507, "чел.")],

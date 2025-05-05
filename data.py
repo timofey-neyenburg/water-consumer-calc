@@ -1,10 +1,3 @@
-__all__ = [
-    "APP_CONTEXT",
-    "get_water_consumer_norm_by_name",
-    "set_num_of_visitors"
-]
-
-
 import json
 import os
 
@@ -28,27 +21,16 @@ APP_CONTEXT = {
     "CURRENT_PROJECT_PATH": None,
     "CURRENT_WIN": "main",
     "LAST_SAVE": 0,
-    "WATER_CONSUMERS": [
-        WaterConsumerNorms(
-            1, 
-            "23 Бани: душевая кабина",
-            ConsuptionMeasurer.ONE_INHABITANT,
-            360, 200, 360, 200, 0.2, 0.14, 3
-        ),
-    ],
+    "WATER_CONSUMERS": {
+        "23 Бани: душевая кабина": (
+            WaterConsumerNorms(
+                "23 Бани: душевая кабина",
+                ConsuptionMeasurer.ONE_INHABITANT,
+                360, 200, 360, 200, 0.2, 0.14, 3
+            )
+        )
+    },
 }
-
-APP_CONTEXT["CURRENT_CONSUMER"] = APP_CONTEXT["WATER_CONSUMERS"][0]
-
-
-def get_water_consumer_norm_by_name(name: str):
-    index = [cons.name for cons in APP_CONTEXT["WATER_CONSUMERS"]].index(name)
-    cons = APP_CONTEXT["WATER_CONSUMERS"][index]
-    APP_CONTEXT["CURRENT_CONSUMER"] = cons
-
-
-def set_num_of_visitors(d):
-    APP_CONTEXT["NUM_OF_VISITORS"] = d
 
 
 class UsersProjectsInfo:
@@ -110,11 +92,10 @@ try:
     UPI = UsersProjectsInfo.load()
     UPI.clear_paths()
 except Exception as err:
-    print(f"unable to load profiles config: {err}")
-    print("creating a default profiles config")
+    app_logger.info(f"unable to load profiles config: {err}")
+    app_logger.info("creating a default profiles config")
     UPI = UsersProjectsInfo.default()
     UPI.dump()
-
 
 
 class ProjectContext:
@@ -134,7 +115,6 @@ class ProjectContext:
     
     @staticmethod
     def new(path: str) -> "ProjectContext":
-        app_logger.error("NEW PROJECT CONTEXT")
         _data = {
             "path": path,
             "last_var_num": 0,
@@ -142,7 +122,6 @@ class ProjectContext:
             "opened_tabs_tags": {},
             "variants_data": {},
         }
-        app_logger.error(f"prepared app context data: {_data}")
         p = ProjectContext(path, _data)
         p.dump()
         app_logger.error("saved project data")
@@ -193,15 +172,28 @@ class ProjectContext:
         if tab_name in self._data["opened_tabs_tags"]:
             del self._data["opened_tabs_tags"][tab_name]
     
-    def add_variant_object(self, variant_tag: str, object_type: str, object_type_id: int, num_of_object_visitors: int):
+    def remove_consumer(self, variant_tag: str, consumer: WaterConsumerNorms):
         if variant_tag in self._data["variants_data"]:
-            cons: WaterConsumerNorms = APP_CONTEXT["WATER_CONSUMERS"][object_type_id-1]
+            object_ids = [o["id"] for o in self._data["variants_data"][variant_tag]["objects"]]
+            if consumer.id in object_ids:
+                self._data["variants_data"][variant_tag]["objects"].pop(object_ids.index(consumer.id))
+                self.dump()
+    
+    def add_variant_object(
+        self,
+        variant_tag: str,
+        consumer: WaterConsumerNorms,
+        num_of_measurers: int,
+        num_of_devies_less_200: bool = True,
+        num_of_devcies: int | None = None,
+    ):
+        if variant_tag in self._data["variants_data"]:
             self._data["variants_data"][variant_tag]["objects"].append({
-                "num_of_object_visitors": num_of_object_visitors,
-                "params": {
-                    "id": cons.id,
-                    "name": cons.name,
-                },
+                "id": consumer.id,
+                "name": consumer.name,
+                "num_of_measurers": num_of_measurers,
+                "are_there_devices_less_then_200": num_of_devies_less_200,
+                "num_of_devices": num_of_devcies,
             })
         self.dump()
     
