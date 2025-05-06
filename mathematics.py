@@ -1,53 +1,34 @@
 """
+
+https://acs-nnov.ru/assets/files/sp_30.13330.2020_vnutrennij_vodoprovod_i_kanalizaciya_zdanij_snip_2.04.01-85.pdf?ysclid=m9yhpdjgll865220296
+
 СП 30.13330.2020
 ВНУТРЕННИЙ ВОДОПРОВОД И КАНАЛИЗАЦИЯ ЗДАНИЙ
 СНиП 2.04.01-85*
 
-# 3.2 Обозначения и единицы измерения
-В настоящем своде правил применены следующие обозначения и единицы измерения:
-
-𝑞0_tot – общий расход воды, л/с, санитарно-техническим прибором (арматурой), принимаемый согласно 5.2;
-
-𝑞0_ℎ – расход горячей воды, л/с, санитарно-техническим прибором (арматурой), принимаемый согласно 5.2;
-
-𝑞0_c – расход холодной воды, л/с, санитарно-техническим прибором (арматурой), принимаемый согласно 5.2;
-
-𝑞0_s – расход стоков от санитарно-технического прибора, л/с, принимаемый согласно таблице А.1;
-
-𝑞_tot– общий максимальный расчетный расход воды, л/с, принимаемый согласно 5.3;
-
-𝑞h – максимальный расчетный расход горячей воды, л/с, принимаемый согласно 5.3;
-
-𝑞c – максимальный расчетный расход холодной воды, л/с, принимаемый согласно 5.3;
-
-qs – максимальный расчетный расход сточных вод для стояков, л/с, принимаемый согласно 5.5;
-
-qsL – максимальный расчетный расход сточных вод для горизонтальных отводящих трубопроводов, л/с, принимаемый согласно 5.7;
-
-q0_ℎ𝑟_𝑡𝑜𝑡 – общий расход воды, л/ч, санитарно-техническим прибором, принимаемый согласно 5.8;
-
-𝑞0_ℎ𝑟_ℎ – расход горячей воды, л/ч, санитарно-техническим прибором, принимаемый согласно 5.8;
-
-𝑞0,ℎ𝑟 𝑐 – расход холодной воды, л/ч, санитарно-техническим прибором, принимаемый согласно 5.8;
-
-𝑞ℎ𝑟,𝑢 𝑡𝑜𝑡 – общий расчетный расход воды, л, потребителем в час наибольшего водопотребления, принимаемый по таблице А.2;
-
-𝑞ℎ𝑟,𝑢 ℎ – расчетный расход горячей воды, л, потребителем в час наибольшего водопотребления, принимаемый по таблице А.2;
-
-𝑞ℎ𝑟,𝑢 𝑐 – расчетный расход холодной воды, л, потребителем в час наибольшего потребления, принимаемый по таблице А.2;
-
-𝑞ℎ𝑟 𝑡𝑜𝑡 – общий максимальный часовой расход воды, м3, принимаемый согласно 5.10;
-
-𝑞ℎ𝑟 ℎ – максимальный часовой расход горячей воды, м3, принимаемый согласно 5.10;
-
-𝑞ℎ𝑟 𝑐 – максимальный часовой расход холодной воды, м³, принимаемый согласно
-
 """
 
-from enum import Enum
 import uuid
+from decimal import Decimal, getcontext
+from enum import Enum
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
+
+from ml import aproximate_alpha
+
+
+getcontext().prec = 8
+
+
+class WateringConsumption(Enum):
+    GRASS = Decimal(3)
+    FOOTBALL_FIELD = Decimal(0.5)
+    OTHER_SPORTS_BUILDINGS = Decimal(1.5)
+    # 4-5??
+    # TROTUARS_SQUARES_AND_FACTORY_ROADS = Decimal()
+    ICE_RINK = Decimal(0.5)
+
 
 
 # ТаблицаА.1 – Расчетные расходы воды и стоков для санитарно-технических приборов
@@ -64,6 +45,7 @@ class DeviceWaterConsumptionNorms:
     wastewater_discharge_lps: float  # Расход стоков от прибора, л/с
     min_nominal_diameter_mm_inlet: float  # Минимальные диаметры условного прохода, мм - подводки
     min_nominal_diameter_mm_outlet: float  # Минимальные диаметры условного прохода, мм - отвода
+
 
 # ТаблицаА.2 – Расчетные расходы воды потребителями
 class ConsuptionMeasurer(Enum):
@@ -96,9 +78,11 @@ class WaterConsumerNorms:
     # Нормы расхода воды (л) - в час наибольшего водопотребления - горячей
     max_hot_water_norms_per_hour: float
     # Расход воды прибором, л/с (л/ч) - общий (холодной И горячей)
-    device_water_consumption_hot_and_cold: float
+    device_water_consumption_hot_and_cold_q0tot: float
+    device_water_consumption_hot_and_cold_q0tot_hr: float
     # Расход воды прибором, л/с (л/ч) - холодной ИЛИ горячей
-    device_water_consumption_hot_or_cold: float
+    device_water_consumption_hot_or_cold_q0: float
+    device_water_consumption_hot_or_cold_q0_hr: float
     # T, ч
     T: float
     # id
@@ -107,9 +91,60 @@ class WaterConsumerNorms:
 
 @dataclass
 class ResultWaterConsumption:
-    meters_cubic_per_day: float
-    meters_cubic_per_hour: float
-    liters_per_second: float
+    meters_cubic_per_day: Decimal
+    meters_cubic_per_hour: Decimal
+    liters_per_second: Decimal
+
+
+@dataclass
+class SecondConsumptionReportData:
+    # Probabilities
+    P_total: Decimal
+    P_hot: Decimal
+    P_cold: Decimal
+    # Water consumption
+    q_total: Decimal
+    q_hot: Decimal
+    q_cold: Decimal
+
+
+@dataclass
+class MaxHourConsumptionReportData:
+    # Probabilities
+    P_total: Decimal
+    P_hot: Decimal
+    P_cold: Decimal
+    # Water consumption
+    q_total: Decimal
+    q_hot: Decimal
+    q_cold: Decimal
+
+
+@dataclass
+class AvgHourConsumptionReportData:
+    # Water consumption
+    q_total: Decimal
+    q_hot: Decimal
+    q_cold: Decimal
+
+
+@dataclass
+class TotalDayConsumptionReportData:
+    # Water consumption
+    Q_total: Decimal
+    Q_hot: Decimal
+    Q_cold: Decimal
+
+
+@dataclass
+class HeatConsumptionReportData:
+    Q_avg_hour: Decimal
+    Q_max_hour: Decimal
+
+
+@dataclass
+class GrassWateringReportData:
+    Quc: Decimal
 
 
 @dataclass
@@ -120,61 +155,349 @@ class TotalObjectConsumption:
     domestic_and_drinking_water_supply_cold: ResultWaterConsumption # Расход горячей воды
     # Бытовая канализация
     domestic_sewerage_general: ResultWaterConsumption # Общий расход воды
-    domestic_sewerage_hot: ResultWaterConsumption # Расход холодной воды
-    domestic_sewerage_cold: ResultWaterConsumption # Расход горячей воды
+    # domestic_sewerage_hot: ResultWaterConsumption # Расход холодной воды
+    # domestic_sewerage_cold: ResultWaterConsumption # Расход горячей воды
 
 
-def calculate_consumption() -> TotalObjectConsumption:
+@dataclass
+class OneObjectDataReport:
+    consumer: WaterConsumerNorms
+    num_of_measureres: int
+    num_of_devices: int
+    num_of_devices_with_hot_water: int
+    seconds_report: SecondConsumptionReportData
+    hours_max_report: MaxHourConsumptionReportData
+    hours_avg_report: AvgHourConsumptionReportData
+    heat_report: HeatConsumptionReportData
+    grass_watering_report: GrassWateringReportData
+    total_day_report: TotalDayConsumptionReportData
+    total_object_report: TotalObjectConsumption
+
+
+def _d(v: int | float) -> Decimal:
+    return Decimal(v)
+
+
+def calculate_consumption_for_one_object(
+    consumer: WaterConsumerNorms,
+    num_of_measurers: int,
+    num_of_devices: int,
+    num_of_devices_with_hot_water: int) -> OneObjectDataReport:
+
+    seconds_consumption = calculate_max_per_sec_consumption(
+        consumer,
+        num_of_measurers,
+        num_of_devices,
+        num_of_devices_with_hot_water
+    )
+
+    max_hour_consumption = calculate_max_hour_consumption(consumer, seconds_consumption)
+    avg_hour_consumption = calculate_avg_hour_consumption(consumer, num_of_measurers)
+    heat_consumption = calculate_heat_consumption(avg_hour_consumption, max_hour_consumption)
+    total_day_consumption = calculate_total_day_consumption(consumer, num_of_measurers)
+    grass_watering = calculate_grass_watering(num_of_measurers)
+
+    total_object_consumption = calculate_total_object_consumption(
+        grass_watering,
+        total_day_consumption,
+        max_hour_consumption,
+        seconds_consumption
+    )
+
+    return OneObjectDataReport(
+        consumer=consumer,
+        num_of_devices=num_of_devices,
+        num_of_measureres=num_of_measurers,
+        num_of_devices_with_hot_water=num_of_devices_with_hot_water,
+        seconds_report=seconds_consumption,
+        hours_avg_report=avg_hour_consumption,
+        hours_max_report=max_hour_consumption,
+        heat_report=heat_consumption,
+        total_day_report=total_day_consumption,
+        grass_watering_report=grass_watering,
+        total_object_report=total_object_consumption,
+    )
+
+
+def calculate_total_object_consumption(
+    grass_watering: GrassWateringReportData,
+    total_day_consumption: TotalDayConsumptionReportData,
+    max_hour_consumption: MaxHourConsumptionReportData,
+    seconds_consumption: SecondConsumptionReportData,
+) -> TotalObjectConsumption:
     return TotalObjectConsumption(
+        # Общий расход воды
         domestic_and_drinking_water_supply_general=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
+            meters_cubic_per_day=total_day_consumption.Q_total + grass_watering.Quc,
+            meters_cubic_per_hour=max_hour_consumption.q_total,
+            liters_per_second=seconds_consumption.q_total,
         ),
         domestic_and_drinking_water_supply_hot=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
+            meters_cubic_per_day=total_day_consumption.Q_hot + grass_watering.Quc,
+            meters_cubic_per_hour=max_hour_consumption.q_hot,
+            liters_per_second=seconds_consumption.q_hot,
         ),
         domestic_and_drinking_water_supply_cold=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
+            meters_cubic_per_day=total_day_consumption.Q_cold,
+            meters_cubic_per_hour=max_hour_consumption.q_cold,
+            liters_per_second=seconds_consumption.q_cold,
         ),
+        # Бытовая канализация
         domestic_sewerage_general=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
-        ),
-        domestic_sewerage_hot=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
-        ),
-        domestic_sewerage_cold=ResultWaterConsumption(
-            meters_cubic_per_day=-1, # idk how to calc
-            meters_cubic_per_hour=0,
-            liters_per_second=0
+            meters_cubic_per_day=total_day_consumption.Q_total - grass_watering.Quc,
+            meters_cubic_per_hour=max_hour_consumption.q_total,
+            liters_per_second=Decimal(-1),
         ),
     )
 
 
-def calculate_max_per_sec_consumption():
+def calculate_grass_watering(num_of_measurers: int) -> GrassWateringReportData:
+    # TODO: WateringConsumption param definition
+    # NOTE: do not do this for now
+    # Quc = WateringConsumption.GRASS.value * _d(num_of_measurers) / _d(1000)
+    Quc = _d(0)
+
+    return GrassWateringReportData(Quc=Quc)
+
+
+def calculate_total_day_consumption(
+    consumer: WaterConsumerNorms,
+    num_of_measurers: int) -> TotalDayConsumptionReportData:
+
+    # TODO - fuck me - how to calculate it?
+
+    working_hours = _d(4)
+
+    Q_total = (
+        _d(consumer.avg_hot_and_cold_water_norms_per_day)
+        * num_of_measurers
+        * working_hours
+        / _d(1000)
+    )
+    Q_hot = (
+        (
+            _d(consumer.avg_hot_and_cold_water_norms_per_day) 
+            - _d(consumer.avg_hot_water_norms_per_day)
+        )
+        * num_of_measurers
+        * working_hours
+        / _d(1000)
+    )
+    Q_cold = (
+        (
+            _d(consumer.avg_hot_and_cold_water_norms_per_day) 
+            - _d(consumer.avg_hot_water_norms_per_day)
+        )
+        * num_of_measurers
+        * working_hours
+        / _d(1000)
+    )
+
+
+    return TotalDayConsumptionReportData(
+        Q_total=Q_total,
+        Q_hot=Q_hot,
+        Q_cold=Q_cold,
+    )
+
+
+def calculate_heat_consumption(
+    avg_hour_consumption: AvgHourConsumptionReportData,
+    max_hour_consumption: MaxHourConsumptionReportData) -> HeatConsumptionReportData:
+
+    Qht = (
+        _d(1.16) 
+        * avg_hour_consumption.q_hot 
+        * _d(61 - 5)
+        + max_hour_consumption.q_hot * _d(0.3)
+    )
+    Qhrt = (
+        _d(1.16) 
+        * max_hour_consumption.q_hot 
+        * _d(61 - 5)
+        + max_hour_consumption.q_hot * _d(0.3)
+    )
+
+    return HeatConsumptionReportData(
+        Q_avg_hour=Qht,
+        Q_max_hour=Qhrt,
+    ) 
+
+
+def calculate_avg_hour_consumption(
+    consumer: WaterConsumerNorms,
+    num_of_measurers: int,
+) -> AvgHourConsumptionReportData:
     """
-    5.3 Максимальный расчетный расход воды на расчетном участке сети 𝑞 (𝑞𝑡𝑜𝑡, 𝑞ℎ, 𝑞𝑐), л/с, следует определять по формуле:
-    𝑞 = 5 𝑞0 𝑎, 
-        где 𝑞0 (𝑞0 𝑡𝑜𝑡, 𝑞0 ℎ, 𝑞0 𝑐), – расход воды, л/с, значение которого следует определять согласно 5.2;
-        𝑎 – коэффициент, определяемый по приложению Б в зависимости от общего числа приборов N на расчетном участке сети и вероятности их действия Р.
-    При этом таблицей Б.1 следует руководствоваться при Р > 0,1 и N  200; при других значениях Р и N коэффициент  следует принимать по таблице Б.2.
+
+    5.11 Средний часовой расход воды 𝑞𝑇 (𝑞𝑇𝑡𝑜𝑡, 𝑞𝑇ℎ, 𝑞𝑇𝑐 ), м3, за расчетное время водопотребления (сутки, смена) Т, ч, следует определять по формуле:
+    ...
+
     """
+
+    qT_tot = (
+        _d(consumer.avg_hot_and_cold_water_norms_per_day)
+        * _d(consumer.T)
+        * num_of_measurers
+        / 1000
+    )
+    qT_h = (
+        _d(consumer.avg_hot_water_norms_per_day)
+        * _d(consumer.T)
+        * num_of_measurers
+        / 1000
+    )
+    qT_c = (
+        (
+            _d(consumer.avg_hot_and_cold_water_norms_per_day) 
+            - _d(consumer.avg_hot_water_norms_per_day)
+        )
+        * _d(consumer.T)
+        * num_of_measurers
+        / 1000
+    )
+
+    return AvgHourConsumptionReportData(
+        q_total=qT_tot,
+        q_hot=qT_h,
+        q_cold=qT_c,
+    )
+
+
+def calculate_max_hour_consumption(
+    consumer: WaterConsumerNorms,
+    second_consumption: SecondConsumptionReportData,
+) -> MaxHourConsumptionReportData:
+
+    """
+
+    Вероятность использования санитарно-технических приборов 𝑃ℎ𝑟 для системы в целом следует определять по формуле:
+    ...
+    Максимальный часовой расход воды (стоков) 𝑞ℎ𝑟 (𝑞ℎ𝑟𝑡𝑜𝑡, 𝑞ℎℎ𝑟, 𝑞ℎ𝑐𝑟), м3, следует определять по формуле:
+    ...
+
+    """
+
+    Phr_tot = (
+        (
+            3600
+            * second_consumption.P_total
+            * _d(consumer.device_water_consumption_hot_and_cold_q0tot)
+        )
+        /
+        (
+            _d(consumer.device_water_consumption_hot_and_cold_q0tot_hr)
+        )
+    )
+    Phr_c = (
+        (
+            3600
+            * second_consumption.P_cold
+            * _d(consumer.device_water_consumption_hot_or_cold_q0)
+        )
+        /
+        (
+            _d(consumer.device_water_consumption_hot_or_cold_q0_hr)
+        )
+    )
+    Phr_h = (
+        (
+            3600
+            * second_consumption.P_total
+            * _d(consumer.device_water_consumption_hot_or_cold_q0)
+        )
+        /
+        (
+            _d(consumer.device_water_consumption_hot_or_cold_q0_hr)
+        )
+    )
+
+    alpha_hr_tot = aproximate_alpha(Phr_tot)
+    alpha_hr_h = aproximate_alpha(Phr_h)
+    alpha_hr_c = aproximate_alpha(Phr_c)
+
+    qhr_tot = _d(0.005) * _d(consumer.device_water_consumption_hot_and_cold_q0tot_hr) * alpha_hr_tot
+    qhr_c = _d(0.005) * _d(consumer.device_water_consumption_hot_or_cold_q0_hr) * alpha_hr_c
+    qhr_h = _d(0.005) * _d(consumer.device_water_consumption_hot_or_cold_q0_hr) * alpha_hr_h
+
+    return MaxHourConsumptionReportData(
+        P_total=Phr_tot,
+        P_hot=Phr_h,
+        P_cold=Phr_c,
+        q_total=qhr_tot,
+        q_hot=qhr_h,
+        q_cold=qhr_c,
+    )
+
+
+def calculate_max_per_sec_consumption(
+    consumer: WaterConsumerNorms,
+    num_of_measurers: int,
+    num_of_devices: int,
+    num_of_devices_with_hot_water: int) -> SecondConsumptionReportData:
+
+    """ 
+
+    Секундный расход воды  различными  приборами, обслуживающими разных водопотребителей, определяется по формуле 2 СП30.13330.2020:
+    q^tot = 5 x q_0 x alpha, л/с
+    Расчет начинаем с определения вероятности действия приборов различными потребителями:
+    P= q^tot_{hr,u}  х  U / (q_0 х N x 3600)
+
+    """
+
+    P_tot = (
+        (
+            _d(consumer.max_hot_and_cold_water_norms_per_hour) 
+            * _d(num_of_measurers)
+        )
+        / 
+        (
+            _d(consumer.device_water_consumption_hot_and_cold_q0tot)
+            * _d(num_of_devices)
+            * 3600
+        )
+    )
+    P_h = (
+        (
+            _d(consumer.max_hot_water_norms_per_hour) 
+            * _d(num_of_measurers)
+        )
+        / 
+        (
+            _d(consumer.device_water_consumption_hot_or_cold_q0)
+            * _d(num_of_devices_with_hot_water)
+            * 3600
+        )
+    )
+    P_c = (
+        (
+            (
+            _d(consumer.max_hot_and_cold_water_norms_per_hour)
+            - _d(consumer.max_hot_water_norms_per_hour)
+            )
+            * _d(num_of_measurers)
+        )
+        / 
+        (
+            _d(consumer.device_water_consumption_hot_or_cold_q0)
+            * (_d(num_of_devices) - _d(num_of_devices_with_hot_water))
+            * 3600
+        )
+    )
+
+    alpha_tot = aproximate_alpha(P_tot)
+    alpha_h = aproximate_alpha(P_h)
+    alpha_c = aproximate_alpha(P_c)
+
+    q_tot = _d(5) * _d(consumer.device_water_consumption_hot_and_cold_q0tot) * alpha_tot
+    q_h = _d(5) * _d(consumer.device_water_consumption_hot_or_cold_q0) * alpha_h
+    q_c = _d(5) * _d(consumer.device_water_consumption_hot_or_cold_q0) * alpha_c
+
+    return SecondConsumptionReportData(
+        P_total=P_tot, P_hot=P_h, P_cold=P_c,
+        q_total=q_tot, q_hot=q_h, q_cold=q_c,
+    )
 
 
 def calculate_device_activation_possibility():
-    """
-    5.4 Вероятность действия санитарно-технических приборов 𝑃 (𝑃𝑡𝑜𝑡, 𝑃ℎ, 𝑃с) на участках
-    сети следует определять по формулам:
-    а) при однотипных водопотребителях в здании, без учета изменения соотношения U/N
-        𝑃 = 𝑞ℎ𝑟𝑢 𝑈 / (𝑞0 𝑁 ∙ 3600) или 𝑁𝑃 = 𝑞ℎ𝑟,𝑢 𝑈 / (𝑞0 ∙ 3600) ; 
-    б) при отличающихся группах водопотребителей в здании:
-
-    """
+    """ """

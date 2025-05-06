@@ -7,10 +7,99 @@ import threading
 from pathlib import Path
 
 from data import PROJECT_ROOT
-from mathematics import WaterConsumerNorms
+from mathematics import OneObjectDataReport, WaterConsumerNorms
 from settings import app_logger
 
 
+def prepare_latex(filepath: str, use_thread: bool = True, **params):
+    import os
+    file_dir = Path(filepath).parent
+
+    filename_without_extention = os.path.basename(filepath)
+    if filename_without_extention.endswith(".tex"):
+        filename_without_extention = filename_without_extention[:-4]
+
+    if not filepath.endswith(".tex"):
+        filepath += ".tex"
+    
+    document_text = build_document_text()
+
+    def _run():
+        from subprocess import run, DEVNULL
+        from sys import stdout, stderr
+        from shutil import move
+
+        if app_logger.level == logging.DEBUG:
+            stdout_ = stdout
+            stderr_ = stderr
+        else:
+            stdout_ = DEVNULL
+            stderr_ = DEVNULL
+        
+        LATEX_OUTPUT_FILES_TEMP_DIR: PathLike = Path(PROJECT_ROOT) / "tex_temp"
+        if not os.path.exists(LATEX_OUTPUT_FILES_TEMP_DIR):
+            os.makedirs(LATEX_OUTPUT_FILES_TEMP_DIR)
+
+        temp_tex_filepath = str(LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.tex")
+        with open(temp_tex_filepath, "w", encoding="utf-8") as f:
+            f.write(document_text)
+
+        # command = ['pdflatex', '--interaction=nonstopmode', filepath]
+        # command = ["C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe", '--interaction=nonstopmode', temp_tex_filepath]
+        command = [
+            r".\bin\windows\pdflatex.exe",
+            '--interaction=nonstopmode',
+            temp_tex_filepath
+        ]
+        print(command)
+
+        app_logger.debug("starting latex compilation")
+        r = run(
+            command,
+            stdout=stdout_,
+            stderr=stderr_,
+            # cwd=LATEX_OUTPUT_FILES_TEMP_DIR,
+            cwd=r".\assets\tex-minimal",
+            shell=True,
+        )
+        app_logger.debug("finished latex compilation")
+        print("ERROR" if r.returncode == 1 else "OK")
+        return
+
+        app_logger.debug("moving pdf file")
+        move(
+            LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.pdf",
+            file_dir / f"{filename_without_extention}.pdf",
+        )
+        app_logger.debug("done moving pdf file")
+
+        app_logger.debug("removing trash files")
+        for file in os.listdir(LATEX_OUTPUT_FILES_TEMP_DIR):
+            if file.endswith((".log", ".aux", ".tex")):
+                os.remove(LATEX_OUTPUT_FILES_TEMP_DIR / file)
+        app_logger.debug("done trash files")
+
+
+    if use_thread:
+        threading.Thread(target=_run, daemon=True).start()
+    else:
+        _run()
+
+
+def build_document_text(
+    data_report: OneObjectDataReport,
+    project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
+):
+    document = (
+        _build_document_top()
+        # + _build_doc_header(project_name)
+        # + _build_document_objects_list()
+        # + _build_objects_info_table()
+        # + _build_sec_calculations()
+        + _build_document_end()
+    )
+
+    return document
 
 def _build_document_top(images_path: str = './', header_image_name: str = "header.png"):
     txt = (
@@ -205,98 +294,6 @@ def _build_NP_formula(a: float, b: float, c: float, res: float):
     return f"$NP^{top_}_{bottom_} = {a} \\cdot {b} / {c} \\cdot 3600 = {res}$"
 
 
-def build_document_text(
-    project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
-    objects: list[tuple[str, int, str]] = [("Жилая часть", 14507, "чел.")],
-    norms: list[WaterConsumerNorms] = [],
-):
-    document = (
-        _build_document_top()
-        + _build_doc_header(project_name)
-        + _build_document_objects_list(objects)
-        + _build_objects_info_table(norms)
-        + _build_sec_calculations()
-        + _build_document_end()
-    )
-
-    return document
-
-
-def prepare_latex(filepath: str, use_thread: bool = True, **params):
-    import os
-    file_dir = Path(filepath).parent
-
-    filename_without_extention = os.path.basename(filepath)
-    if filename_without_extention.endswith(".tex"):
-        filename_without_extention = filename_without_extention[:-4]
-
-    if not filepath.endswith(".tex"):
-        filepath += ".tex"
-    
-    document_text = build_document_text()
-
-    def _run():
-        from subprocess import run, DEVNULL
-        from sys import stdout, stderr
-        from shutil import move
-
-        if app_logger.level == logging.DEBUG:
-            stdout_ = stdout
-            stderr_ = stderr
-        else:
-            stdout_ = DEVNULL
-            stderr_ = DEVNULL
-        
-        LATEX_OUTPUT_FILES_TEMP_DIR: PathLike = Path(PROJECT_ROOT) / "tex_temp"
-        if not os.path.exists(LATEX_OUTPUT_FILES_TEMP_DIR):
-            os.makedirs(LATEX_OUTPUT_FILES_TEMP_DIR)
-
-        temp_tex_filepath = str(LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.tex")
-        with open(temp_tex_filepath, "w", encoding="utf-8") as f:
-            f.write(document_text)
-
-        # command = ['pdflatex', '--interaction=nonstopmode', filepath]
-        # command = ["C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe", '--interaction=nonstopmode', temp_tex_filepath]
-        command = [
-            r".\bin\windows\pdflatex.exe",
-            '--interaction=nonstopmode',
-            temp_tex_filepath
-        ]
-        print(command)
-
-        app_logger.debug("starting latex compilation")
-        r = run(
-            command,
-            stdout=stdout_,
-            stderr=stderr_,
-            # cwd=LATEX_OUTPUT_FILES_TEMP_DIR,
-            cwd=r".\assets\tex-minimal",
-            shell=True,
-        )
-        app_logger.debug("finished latex compilation")
-        print("ERROR" if r.returncode == 1 else "OK")
-        return
-
-        app_logger.debug("moving pdf file")
-        move(
-            LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.pdf",
-            file_dir / f"{filename_without_extention}.pdf",
-        )
-        app_logger.debug("done moving pdf file")
-
-        app_logger.debug("removing trash files")
-        for file in os.listdir(LATEX_OUTPUT_FILES_TEMP_DIR):
-            if file.endswith((".log", ".aux", ".tex")):
-                os.remove(LATEX_OUTPUT_FILES_TEMP_DIR / file)
-        app_logger.debug("done trash files")
-
-
-    if use_thread:
-        threading.Thread(target=_run, daemon=True).start()
-    else:
-        _run()
-
-
-with open("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", "w", encoding="utf-8") as f:
-    f.write(build_document_text())
+# with open("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", "w", encoding="utf-8") as f:
+#     f.write(build_document_text())
 # prepare_latex("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", use_thread=False)
