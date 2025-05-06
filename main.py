@@ -196,7 +196,7 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                         tag=f"{parent_tab}_num_of_devices_input",
                         source=f"{parent_tab}_num_of_devices_input_value")
                     dpg.add_checkbox(
-                        label="< 200",
+                        label="> 200",
                         callback=mark_num_of_devices,
                         tag=f"{parent_tab}_num_of_devices_checkbox",
                         source=f"{parent_tab}_num_of_devices_check_value")

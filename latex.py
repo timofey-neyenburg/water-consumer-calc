@@ -6,12 +6,16 @@ import threading
 
 from pathlib import Path
 
-from data import PROJECT_ROOT
+from data import PROJECT_ROOT, ProjectContext
 from mathematics import OneObjectDataReport, WaterConsumerNorms
 from settings import app_logger
 
 
-def prepare_latex(filepath: str, use_thread: bool = True, **params):
+def prepare_latex(
+    filepath: str,
+    project_ctx: ProjectContext,
+    use_thread: bool = True,
+):
     import os
     file_dir = Path(filepath).parent
 

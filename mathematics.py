@@ -21,6 +21,9 @@ from ml import aproximate_alpha
 getcontext().prec = 8
 
 
+### Common structures for one object and multiple objects ###
+
+
 class WateringConsumption(Enum):
     GRASS = Decimal(3)
     FOOTBALL_FIELD = Decimal(0.5)
@@ -29,6 +32,20 @@ class WateringConsumption(Enum):
     # TROTUARS_SQUARES_AND_FACTORY_ROADS = Decimal()
     ICE_RINK = Decimal(0.5)
 
+
+class ConsuptionMeasurer(Enum):
+    ONE_INHABITANT = 1
+    ONE_BED = 2
+    ONE_PERSON_PER_SHIFT = 3
+    ONE_PLACE = 4
+    ONE_KG_OF_DRY_CLOTHS = 5
+    ONE_STUDENT_AND_ONE_TEACHER = 6
+    ONE_DEVICE_PER_SHIFT = 7
+    ONE_DISH = 8
+    ONE_EMPLOYEE_ON_20_SQU_MET = 9
+    PERCENT_OF_POOL_CAPACITY = 10
+    ONE_DOUCH_PER_SHIFT = 11
+    ONE_SQU_MET = 12
 
 
 # ТаблицаА.1 – Расчетные расходы воды и стоков для санитарно-технических приборов
@@ -48,21 +65,6 @@ class DeviceWaterConsumptionNorms:
 
 
 # ТаблицаА.2 – Расчетные расходы воды потребителями
-class ConsuptionMeasurer(Enum):
-    ONE_INHABITANT = 1
-    ONE_BED = 2
-    ONE_PERSON_PER_SHIFT = 3
-    ONE_PLACE = 4
-    ONE_KG_OF_DRY_CLOTHS = 5
-    ONE_STUDENT_AND_ONE_TEACHER = 6
-    ONE_DEVICE_PER_SHIFT = 7
-    ONE_DISH = 8
-    ONE_EMPLOYEE_ON_20_SQU_MET = 9
-    PERCENT_OF_POOL_CAPACITY = 10
-    ONE_DOUCH_PER_SHIFT = 11
-    ONE_SQU_MET = 12
-
-
 @dataclass
 class WaterConsumerNorms:
     # Водопотребители
@@ -89,6 +91,17 @@ class WaterConsumerNorms:
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
+### Reports for one object ###
+
+
+@dataclass
+class WaterConsumerParams:
+    consumer_norms: WaterConsumerNorms
+    num_of_devices: int
+    num_of_devices_hot: int
+    num_of_measurers: int
+
+
 @dataclass
 class ResultWaterConsumption:
     meters_cubic_per_day: Decimal
@@ -98,6 +111,10 @@ class ResultWaterConsumption:
 
 @dataclass
 class SecondConsumptionReportData:
+    # alphas
+    alpha_total: Decimal
+    alpha_hot: Decimal
+    alpha_cold: Decimal
     # Probabilities
     P_total: Decimal
     P_hot: Decimal
@@ -110,6 +127,10 @@ class SecondConsumptionReportData:
 
 @dataclass
 class MaxHourConsumptionReportData:
+    # alphas
+    alpha_total: Decimal
+    alpha_hot: Decimal
+    alpha_cold: Decimal
     # Probabilities
     P_total: Decimal
     P_hot: Decimal
@@ -174,28 +195,163 @@ class OneObjectDataReport:
     total_object_report: TotalObjectConsumption
 
 
-def _d(v: int | float) -> Decimal:
-    return Decimal(v)
+### Reports for multiple objects ###
 
 
-def calculate_consumption_for_one_object(
-    consumer: WaterConsumerNorms,
-    num_of_measurers: int,
-    num_of_devices: int,
-    num_of_devices_with_hot_water: int) -> OneObjectDataReport:
+@dataclass
+class MultipleObjectsNP:
+    NP_total: Decimal
+    NP_hot: Decimal
+    NP_cold: Decimal
 
-    seconds_consumption = calculate_max_per_sec_consumption(
-        consumer,
-        num_of_measurers,
-        num_of_devices,
-        num_of_devices_with_hot_water
+
+@dataclass
+class MultipleObjectsAlphas:
+    alhpha_total: Decimal
+    alhpha_hot: Decimal
+    alhpha_cold: Decimal
+
+
+@dataclass
+class MultipleObjectsQs:
+    q_total: Decimal
+    q_hot: Decimal
+    q_cold: Decimal
+
+
+@dataclass
+class MultipleObjectsSecondsConsumptionDataReport:
+    NPs: list[MultipleObjectsNP]
+    alphas: list[MultipleObjectsAlphas]
+    q0_total: Decimal
+    q0_hot: Decimal
+    q0_cold: Decimal
+    q0_1_total: Decimal
+    q0_1_hot: Decimal
+    q0_1_cold: Decimal
+
+
+@dataclass
+class MultipleObjectsTotalHoursConsumptionDataReport:
+    NPs: list[MultipleObjectsNP]
+    alphas: list[MultipleObjectsAlphas]
+    q0s: list[MultipleObjectsQs]
+    q0s_2: list[MultipleObjectsQs]
+
+
+@dataclass
+class MultipleObjectsTotalDayConsumptionDataReport:
+    q0s: list[MultipleObjectsQs]
+    Qu_total: Decimal
+    Qu_hot: Decimal
+    Qu_cold: Decimal
+
+
+@dataclass
+class MultipleObjectsHeatConsumptionDataReport:
+    Q_avg_hour: Decimal
+    Q_max_hour: Decimal
+
+
+@dataclass
+class MultipleObjectsDataReport:
+    seconds_consumption: MultipleObjectsSecondsConsumptionDataReport
+    hours_consumption: MultipleObjectsTotalHoursConsumptionDataReport
+    day_consumption: MultipleObjectsTotalDayConsumptionDataReport
+    heat_consumption: MultipleObjectsHeatConsumptionDataReport
+    consumers: list[WaterConsumerNorms]
+
+
+### Multiple objects calculations ###
+
+
+def calculate_consumption_for_multiple_objects(consumers_params: list[WaterConsumerParams]) -> MultipleObjectsDataReport:
+    return MultipleObjectsDataReport(
+        consumers=[cp.consumer_norms for cp in consumers_params],
     )
 
-    max_hour_consumption = calculate_max_hour_consumption(consumer, seconds_consumption)
-    avg_hour_consumption = calculate_avg_hour_consumption(consumer, num_of_measurers)
+
+def calculate_seconds_consumption(consumers_params: list[WaterConsumerParams]):
+    nps: list[MultipleObjectsNP] = []
+    alphas: list[MultipleObjectsAlphas] = []
+
+    for params in consumers_params:
+        Np_tot = (
+            _d(params.consumer_norms.max_hot_and_cold_water_norms_per_hour)
+            * _d(params.num_of_measurers)
+            * 3600
+            / _d(params.consumer_norms.device_water_consumption_hot_and_cold_q0tot)
+        )
+        Np_h = (
+            _d(params.consumer_norms.max_hot_water_norms_per_hour)
+            * _d(params.num_of_measurers)
+            * 3600
+            / _d(params.consumer_norms.device_water_consumption_hot_or_cold_q0)
+        )
+        Np_c = (
+            (
+                _d(params.consumer_norms.max_hot_and_cold_water_norms_per_hour)
+                - 
+                _d(params.consumer_norms.max_hot_and_cold_water_norms_per_hour)
+            )
+            * _d(params.num_of_measurers)
+            * 3600
+            / _d(params.consumer_norms.device_water_consumption_hot_or_cold_q0)
+        )
+
+        alpha_tot = aproximate_alpha(Np_tot)
+        alpha_h = aproximate_alpha(Np_h)
+        alpha_c = aproximate_alpha(Np_c)
+
+        nps.append(MultipleObjectsNP(NP_total=Np_tot, NP_cold=Np_c, NP_hot=Np_h))
+        alphas.append(MultipleObjectsAlphas(alhpha_total=alpha_tot, alhpha_cold=alpha_c, alhpha_hot=alpha_h))
+    
+    NP_tot_sum = sum([n.NP_total for n in nps])
+    NP_h_sum = sum([n.NP_hot for n in nps])
+    NP_c_sum = sum([n.NP_cold for n in nps])
+
+    q0_tot = (
+        sum([
+                
+        ])
+        / 
+        NP_tot_sum
+    )
+    q0_h = _d(1)
+    q0_c = _d(1)
+
+    q0_1_tot = _d(1)
+    q0_1_h = _d(1)
+    q0_1_c = _d(1)
+
+    
+    return MultipleObjectsSecondsConsumptionDataReport(
+        NPs=nps,
+        alphas=alphas,
+        q0_total=q0_tot,
+        q0_hot=q0_h,
+        q0_cold=q0_c,
+        q0_1_total=q0_1_tot,
+        q0_1_hot=q0_1_h,
+        q0_1_cold=q0_1_c,
+    )
+
+### One object calculations ###
+
+
+def calculate_consumption_for_one_object(consumer_params: WaterConsumerParams) -> OneObjectDataReport:
+    seconds_consumption = calculate_max_per_sec_consumption(
+        consumer_params.consumer_norms,
+        consumer_params.num_of_measurers,
+        consumer_params.num_of_devices,
+        consumer_params.num_of_devices_hot,
+    )
+
+    max_hour_consumption = calculate_max_hour_consumption(consumer_params.consumer_norms, seconds_consumption)
+    avg_hour_consumption = calculate_avg_hour_consumption(consumer_params.consumer_norms, consumer_params.num_of_measurers)
     heat_consumption = calculate_heat_consumption(avg_hour_consumption, max_hour_consumption)
-    total_day_consumption = calculate_total_day_consumption(consumer, num_of_measurers)
-    grass_watering = calculate_grass_watering(num_of_measurers)
+    total_day_consumption = calculate_total_day_consumption(consumer_params.consumer_norms, consumer_params.num_of_measurers)
+    grass_watering = calculate_grass_watering(consumer_params.num_of_measurers)
 
     total_object_consumption = calculate_total_object_consumption(
         grass_watering,
@@ -205,10 +361,10 @@ def calculate_consumption_for_one_object(
     )
 
     return OneObjectDataReport(
-        consumer=consumer,
-        num_of_devices=num_of_devices,
-        num_of_measureres=num_of_measurers,
-        num_of_devices_with_hot_water=num_of_devices_with_hot_water,
+        consumer=consumer_params.consumer_norms,
+        num_of_devices=consumer_params.num_of_devices,
+        num_of_measureres=consumer_params.num_of_measurers,
+        num_of_devices_with_hot_water=consumer_params.num_of_devices_hot,
         seconds_report=seconds_consumption,
         hours_avg_report=avg_hour_consumption,
         hours_max_report=max_hour_consumption,
@@ -421,12 +577,9 @@ def calculate_max_hour_consumption(
     qhr_h = _d(0.005) * _d(consumer.device_water_consumption_hot_or_cold_q0_hr) * alpha_hr_h
 
     return MaxHourConsumptionReportData(
-        P_total=Phr_tot,
-        P_hot=Phr_h,
-        P_cold=Phr_c,
-        q_total=qhr_tot,
-        q_hot=qhr_h,
-        q_cold=qhr_c,
+        alpha_total=alpha_hr_tot, alpha_cold=alpha_hr_c, alpha_hot=alpha_hr_h,
+        P_total=Phr_tot, P_hot=Phr_h, P_cold=Phr_c,
+        q_total=qhr_tot, q_hot=qhr_h, q_cold=qhr_c,
     )
 
 
@@ -494,10 +647,11 @@ def calculate_max_per_sec_consumption(
     q_c = _d(5) * _d(consumer.device_water_consumption_hot_or_cold_q0) * alpha_c
 
     return SecondConsumptionReportData(
+        alpha_total=alpha_tot, alpha_cold=alpha_c, alpha_hot=alpha_h,
         P_total=P_tot, P_hot=P_h, P_cold=P_c,
         q_total=q_tot, q_hot=q_h, q_cold=q_c,
     )
 
 
-def calculate_device_activation_possibility():
-    """ """
+def _d(v: int | float) -> Decimal:
+    return Decimal(v)
