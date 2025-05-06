@@ -1,3 +1,6 @@
 [submodule "assets"]
 	path = assets
 	url = https://github.com/timofey-neyenburg/water-calc-assets.git
+[submodule "water-calc-assets"]
+	path = water-calc-assets
+	url = https://github.com/timofey-neyenburg/water-calc-assets.git
