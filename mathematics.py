@@ -460,6 +460,7 @@ def calculate_total_day_consumption(
 
     # TODO - fuck me - how to calculate it?
 
+    # TODO: MAGIC NUMBER
     working_hours = _d(4)
 
     Q_total = (
@@ -470,8 +471,7 @@ def calculate_total_day_consumption(
     )
     Q_hot = (
         (
-            _d(consumer.avg_hot_and_cold_water_norms_per_day) 
-            - _d(consumer.avg_hot_water_norms_per_day)
+            _d(consumer.avg_hot_water_norms_per_day)
         )
         * num_of_measurers
         * working_hours
@@ -531,24 +531,21 @@ def calculate_avg_hour_consumption(
 
     qT_tot = (
         _d(consumer.avg_hot_and_cold_water_norms_per_day)
-        * _d(consumer.T)
         * num_of_measurers
-        / 1000
+        / (1000 * _d(consumer.T))
     )
     qT_h = (
         _d(consumer.avg_hot_water_norms_per_day)
-        * _d(consumer.T)
         * num_of_measurers
-        / 1000
+        / (1000 * _d(consumer.T))
     )
     qT_c = (
         (
             _d(consumer.avg_hot_and_cold_water_norms_per_day) 
             - _d(consumer.avg_hot_water_norms_per_day)
         )
-        * _d(consumer.T)
         * num_of_measurers
-        / 1000
+        / (1000 * _d(consumer.T))
     )
 
     return AvgHourConsumptionReportData(

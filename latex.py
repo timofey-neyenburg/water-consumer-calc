@@ -12,7 +12,7 @@ from mathematics import (
     WaterConsumerParams,
     calculate_consumption_for_multiple_objects,
     calculate_consumption_for_one_object,
-    _r
+    _r, _d
 )
 
 from settings import CONF, app_logger
@@ -130,69 +130,188 @@ def _build_one_object_report(report: OneObjectDataReport, project_name: str):
         + _build_document_objects_list(objects)
         + _build_objects_info_table(objects)
         + _build_one_object_seconds_calculation(report)
-        + _build_one_object_hours_calculation(report)
+        + _build_one_object_hours_max_calculation(report)
+        + _build_one_object_hours_avg_calculation(report)
+        + _build_one_object_heat_consumption_calculation(report)
+        + _build_one_object_total_day_calculation(report)
         + _build_document_end()
     )
 
     return document
 
 
-def _build_one_object_hours_calculation(report: OneObjectDataReport):
+
+def _build_one_object_total_day_calculation(report: OneObjectDataReport) -> str:
+    txt = "\\\\ \n"
+    txt += "\\section{*\\textbf{Общий суточный расход:}} \\\\ \n"
+    txt += f"{report.consumer.name} \\\\ \n"
+    txt += (
+        "$Q_u^{tot} = <a> \\cdot <b> \\cdot <c> / 1000 = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_and_cold_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(4)))
+        .replace("<d>", str(_r(report.total_day_report.Q_total)))
+    )
+    txt += (
+        "$Q_u^{h} = <a> \\cdot <b> \\cdot <c> / 1000 = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(4)))
+        .replace("<d>", str(_r(report.total_day_report.Q_hot)))
+    )
+    txt += (
+        "$Q_u^{c} = <a> \\cdot <b> \\cdot <c> / 1000 = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_and_cold_water_norms_per_day - report.consumer.avg_hot_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(4)))
+        .replace("<d>", str(_r(report.total_day_report.Q_cold)))
+    )
+    txt += "\\\\ \n"
+    return txt
+
+
+def _build_one_object_heat_consumption_calculation(report: OneObjectDataReport):
+    txt = "\\\\ \n"
+    txt += """
+\\section{*\\textbf{Расход тепла}} \\\\ \n"
+5.12 Расход тепла 𝑄𝑇ℎ  (𝑄ℎℎ𝑟), кВт, на приготовление горячей воды с учетом потерь тепла подающими и циркуляционными трубопроводами 𝑄ℎ𝑡 следует определять \\\\ \n
+\\noindent \n
+а) в течение среднего часа  \\\\ \n
+$Q^h_T = 1,16 \\cdot q^h_T \\cdot (t^h - t^c) + Q^{ht}$; \\\\ \n
+\\noindent \n
+б) в течение часа максимального водопотребления
+$Q^h_{hr} = 1,16 \\cdot q^h_{hr} \\cdot (t^h - t^c) + Q^{ht}$; \\\\ \n
+"""
+    txt += f"{report.consumer.name} \\\\ \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$Q^h_T = 1,16 \\cdot <a> \\cdot (<b> - <c>) + <d> = <e>$; \\\\ \n"
+        .replace("<a>", str(_r(report.hours_avg_report.q_hot)))
+        # TODO: MAGIC NUMBER
+        .replace("<b>", str(_r(61)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(5)))
+        .replace("<d>", str(_r(report.hours_max_report.q_hot * _d(0.3))))
+        .replace("<e>", str(_r(report.heat_report.Q_avg_hour)))
+    )
+    txt += (
+        "$Q^h_{hr} = 1,16 \\cdot <a> \\cdot (<b> - <c>) + <d> = <e>$; \\\\ \n"
+        .replace("<a>", str(_r(report.hours_max_report.q_hot)))
+        # TODO: MAGIC NUMBER
+        .replace("<b>", str(_r(61)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(5)))
+        .replace("<d>", str(_r(report.hours_max_report.q_hot * _d(0.3))))
+        .replace("<e>", str(_r(report.heat_report.Q_max_hour)))
+    )
+
+    txt += "\\\\ \n"
+
+    return txt
+
+
+def _build_one_object_hours_avg_calculation(report: OneObjectDataReport):
+    txt = "\\\\ \n"
+
+    txt += """
+\\section{*\\textbf{Средний часовой расход воды}} \\\\ \n"
+Средний часовой расход воды 𝑞𝑇 (𝑞𝑇𝑡𝑜𝑡, 𝑞𝑇ℎ, 𝑞𝑇𝑐 ), м3, за расчетное время водопотребления (сутки, смена) Т, ч, следует определять по формуле: \\\\ \n
+$q_{T} = \\frac{\\sum_{1}^{i}{q_{u,i} \\cdot U_{i}}}{1000 \\cdot T} $ \\\\ \n
+"""
+    txt += f"{report.consumer.name} \\\\ \n"
+    txt += "\\\\ \n"
+
+    txt += (
+        "$q_{T,0}^{tot} = \\frac{\\sum_{1}^{i}{<a> \\cdot <b>}}{1000 \\cdot <c>}  = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_and_cold_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.T)))
+        .replace("<d>", str(_r(report.hours_avg_report.q_total)))
+    )
+    txt += (
+        "$q_{T,0}^{h} = \\frac{\\sum_{1}^{i}{<a> \\cdot <b>}}{1000 \\cdot <c>}  = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.T)))
+        .replace("<d>", str(_r(report.hours_avg_report.q_hot)))
+    )
+    txt += (
+        "$q_{T,0}^{c} = \\frac{\\sum_{1}^{i}{<a> \\cdot <b>}}{1000 \\cdot <c>}  = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.avg_hot_and_cold_water_norms_per_day - report.consumer.avg_hot_water_norms_per_day)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.T)))
+        .replace("<d>", str(_r(report.hours_avg_report.q_cold)))
+    )
+
+    txt += "\\\\ \n"
+
+    return txt
+
+
+def _build_one_object_hours_max_calculation(report: OneObjectDataReport):
     txt = "\\\\ \n"
 
     txt += """
 \\section{*\\textbf{Максимальный часовойрасход воды (стоков)}} \\\\ \n
-\\noindent
+\\noindent \n
 Максимальный часовойрасход воды (стоков) 𝑞ℎ𝑟 (𝑞ℎ𝑟𝑡𝑜𝑡, 𝑞ℎℎ𝑟, 𝑞ℎ𝑐𝑟), м3, следует определять по формуле: \\\\ \n
 $q_{hr} = 0,005 \\cdot q_{0,hr} \\cdot \\alpha_{hr}$ \\\\ \n
-\\noindent
+\\noindent \n
 Вероятность использования санитарно-технических приборов ℎ для системы в целом следует определять по формуле \\\\ \n
 $P_{hr} = \\frac{3600 \\cdot P \\cdot q_0}{q_{0,hr}}$ \\\\ \n
 """ 
     txt += f"{report.consumer.name} \\\\ \n"
     txt += "\\\\ \n"
     txt += (
-        "$P_{hr}^{tot} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
-        .replace("<a>", str(report.seconds_report.P_total))
-        .replace("<b>", str(report.consumer.device_water_consumption_hot_and_cold_q0tot))
-        .replace("<c>", str(report.consumer.device_water_consumption_hot_and_cold_q0tot_hr))
+        "$P_{hr}^{tot} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>} = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_total)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_and_cold_q0tot)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_and_cold_q0tot_hr)))
+        .replace("<d>", str(_r(report.hours_max_report.P_total)))
     )
     txt += (
-        "$P_{hr}^{h} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
-        .replace("<a>", str(report.seconds_report.P_hot))
-        .replace("<b>", str(report.consumer.device_water_consumption_hot_or_cold_q0))
-        .replace("<c>", str(report.consumer.device_water_consumption_hot_or_cold_q0_hr))
+        "$P_{hr}^{h} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>} = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_hot)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0_hr)))
+        .replace("<d>", str(_r(report.hours_max_report.P_hot)))
     )
     txt += (
-        "$P_{hr}^{c} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
-        .replace("<a>", str(report.seconds_report.P_cold))
-        .replace("<b>", str(report.consumer.device_water_consumption_hot_or_cold_q0))
-        .replace("<c>", str(report.consumer.device_water_consumption_hot_or_cold_q0_hr))
+        "$P_{hr}^{c} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>} = <d>$ \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_cold)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0_hr)))
+        .replace("<d>", str(_r(report.hours_max_report.P_cold)))
     )
     txt += "\\\\ \n"
     txt += "По таблице Б.1 СП30.13330.2020 находим значение коэффициента $\\alpha$. \\\\ \n"
     txt += "\\\\ \n"
     txt += (
         "$P_{hr}^{tot} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
-        .replace("<a>", str())
-        .replace("<b>", str())
-        .replace("<c>", str())
-        .replace("<d>", str())
+        .replace("<a>", str(_r(report.hours_max_report.P_total)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_and_cold_q0tot_hr)))
+        .replace("<c>", str(_r(report.hours_max_report.alpha_total)))
+        .replace("<d>", str(_r(report.hours_max_report.q_total)))
     )
     txt += (
         "$P_{hr}^{h} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0}^{h} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
-        .replace("<a>", str())
-        .replace("<b>", str())
-        .replace("<c>", str())
-        .replace("<d>", str())
+        .replace("<a>", str(_r(report.hours_max_report.P_hot)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0_hr)))
+        .replace("<c>", str(_r(report.hours_max_report.alpha_hot)))
+        .replace("<d>", str(_r(report.hours_max_report.q_hot)))
     )
     txt += (
         "$P_{hr}^{c} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0}^{c} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
-        .replace("<a>", str())
-        .replace("<b>", str())
-        .replace("<c>", str())
-        .replace("<d>", str())
+        .replace("<a>", str(_r(report.hours_max_report.P_cold)))
+        .replace("<b>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0_hr)))
+        .replace("<c>", str(_r(report.hours_max_report.alpha_cold)))
+        .replace("<d>", str(_r(report.hours_max_report.q_cold)))
     )
+
+    txt += "\\\\ \n"
 
     return txt
 
@@ -202,14 +321,14 @@ def _build_one_object_seconds_calculation(report: OneObjectDataReport):
 
     txt += """
 \\section*{\\textbf{Общий секундный расход:}} \\\\ \n
-\\noindent
+\\noindent \n
 Секундный расход воды различными приборами, обслуживающими разных водопотребителей, определяется по формуле 2 СП30.13330.2020 \\\\ \n
 $q^{tot} = 5 \\cdot q_0 \\cdot \\alpha$, л/с \\\\ \n
-\\noindent
+\\noindent \n
 Расчет начинаем с определения вероятности действия приборов различными потребителями: \\\\ \n
 $P = q^{tot}_{hr,u} \\cdot U / (q_0 \\cdot N \\cdot 3600)$ \\\\ \n
 \\\\ \n
-\\noindent
+\\noindent \n
 """
     txt += f"{report.consumer.name} \\\\ \n"
     txt += "\\\\ \n"
