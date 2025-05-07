@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from settings import app_logger
-from mathematics import WaterConsumerNorms, ConsuptionMeasurer
+from mathematics import WaterConsumerNorms, ConsuptionMeasurer, WaterConsumerParams
 
 
 PROJECT_ROOT = str(Path(__file__).parent)
@@ -26,9 +26,9 @@ APP_CONTEXT = {
             WaterConsumerNorms(
                 "23 Бани: душевая кабина",
                 ConsuptionMeasurer.ONE_INHABITANT,
-                360, 200, 360, 200, 0.2, 0.14, 3
+                360, 200, 360, 200, 0.2, 360, 0.14, 240, 3
             )
-        )
+        ),
     },
 }
 
@@ -43,7 +43,6 @@ class UsersProjectsInfo:
         self.last_opend_project = last_opend_project
 
     def _to_dict(self) -> dict:
-        print(self)
         return {
             "users_projects_paths": self.users_projects_paths,
             "last_opend_project": self.last_opend_project,
@@ -179,13 +178,27 @@ class ProjectContext:
                 self._data["variants_data"][variant_tag]["objects"].pop(object_ids.index(consumer.id))
                 self.dump()
     
+    def get_variant_objects(self, variant_tag: str) -> list[WaterConsumerParams]:
+        if variant_tag in self._data["variants_data"]:
+            return [
+                WaterConsumerParams(
+                    consumer_norms=APP_CONTEXT["WATER_CONSUMERS"][obj["name"]],
+                    num_of_devices=obj["num_of_devices"],
+                    num_of_devices_hot=obj["num_of_devices_hot"],
+                    num_of_measurers=obj["num_of_measurers"]
+                )
+                for obj in self._data["variants_data"][variant_tag]["objects"]
+            ]
+        return []
+    
     def add_variant_object(
         self,
         variant_tag: str,
         consumer: WaterConsumerNorms,
         num_of_measurers: int,
+        num_of_devcies: int,
+        num_of_devcies_hot: int,
         num_of_devies_less_200: bool = True,
-        num_of_devcies: int | None = None,
     ):
         if variant_tag in self._data["variants_data"]:
             self._data["variants_data"][variant_tag]["objects"].append({
@@ -194,6 +207,7 @@ class ProjectContext:
                 "num_of_measurers": num_of_measurers,
                 "are_there_devices_less_then_200": num_of_devies_less_200,
                 "num_of_devices": num_of_devcies,
+                "num_of_devices_hot": num_of_devcies_hot,
             })
         self.dump()
     

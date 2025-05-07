@@ -1,22 +1,72 @@
 import datetime
-from fileinput import filename
 import logging
-from os import PathLike
 import threading
 
 from pathlib import Path
 
-from data import PROJECT_ROOT, ProjectContext
-from mathematics import OneObjectDataReport, WaterConsumerNorms
-from settings import app_logger
+from data import ProjectContext
+from mathematics import (
+    MultipleObjectsDataReport,
+    OneObjectDataReport,
+    WaterConsumerNorms,
+    WaterConsumerParams,
+    calculate_consumption_for_multiple_objects,
+    calculate_consumption_for_one_object,
+    _r
+)
+
+from settings import CONF, app_logger
 
 
 def prepare_latex(
     filepath: str,
     project_ctx: ProjectContext,
+    variant: str,
     use_thread: bool = True,
 ):
     import os
+
+    def _run(text: str):
+        from subprocess import run
+        from shutil import move
+
+        capture_output = app_logger.level == logging.DEBUG
+        
+        cwd = CONF.TEX_COMPILER_DIR
+        tex_fname = f"{filename_without_extention}.tex"
+        tex_fname_ws_decoded = os.fsencode(tex_fname).decode()
+        temp_tex_filepath = Path(cwd) / tex_fname
+
+        with open(temp_tex_filepath, "w", encoding="utf-8") as f:
+            f.write(text)
+
+        command = ["pdflatex.exe", "--interaction=nonstopmode", tex_fname_ws_decoded]
+
+        app_logger.debug(f"starting latex compilation: {command}")
+        run(
+            command,
+            cwd=cwd,
+            shell=True,
+            capture_output=capture_output,
+        )
+        app_logger.debug("finished latex compilation")
+
+        if not os.path.exists(Path(cwd) / f"{filename_without_extention}.pdf"):
+            raise ValueError("Unable to compile document")
+
+        app_logger.debug("moving pdf file")
+        move(
+            Path(cwd) / f"{filename_without_extention}.pdf",
+            file_dir / f"{filename_without_extention}.pdf",
+        )
+        app_logger.debug("done moving pdf file")
+
+        app_logger.debug("removing trash files")
+        for file in os.listdir(cwd):
+            if file.endswith((".log", ".aux", ".tex")):
+                os.remove(Path(cwd) / file)
+        app_logger.debug("done trash files")
+
     file_dir = Path(filepath).parent
 
     filename_without_extention = os.path.basename(filepath)
@@ -26,97 +76,212 @@ def prepare_latex(
     if not filepath.endswith(".tex"):
         filepath += ".tex"
     
-    document_text = build_document_text()
+    objects = project_ctx.get_variant_objects(variant)
+    if len(objects) == 0:
+        raise TypeError("Nothing to build")
 
-    def _run():
-        from subprocess import run, DEVNULL
-        from sys import stdout, stderr
-        from shutil import move
+    if len(objects) > 1:
+        data_report = calculate_consumption_for_multiple_objects(objects)
+    else:
+        data_report = calculate_consumption_for_one_object(objects[0])
 
-        if app_logger.level == logging.DEBUG:
-            stdout_ = stdout
-            stderr_ = stderr
-        else:
-            stdout_ = DEVNULL
-            stderr_ = DEVNULL
-        
-        LATEX_OUTPUT_FILES_TEMP_DIR: PathLike = Path(PROJECT_ROOT) / "tex_temp"
-        if not os.path.exists(LATEX_OUTPUT_FILES_TEMP_DIR):
-            os.makedirs(LATEX_OUTPUT_FILES_TEMP_DIR)
-
-        temp_tex_filepath = str(LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.tex")
-        with open(temp_tex_filepath, "w", encoding="utf-8") as f:
-            f.write(document_text)
-
-        # command = ['pdflatex', '--interaction=nonstopmode', filepath]
-        # command = ["C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\pdflatex.exe", '--interaction=nonstopmode', temp_tex_filepath]
-        command = [
-            r".\bin\windows\pdflatex.exe",
-            '--interaction=nonstopmode',
-            temp_tex_filepath
-        ]
-        print(command)
-
-        app_logger.debug("starting latex compilation")
-        r = run(
-            command,
-            stdout=stdout_,
-            stderr=stderr_,
-            # cwd=LATEX_OUTPUT_FILES_TEMP_DIR,
-            cwd=r".\assets\tex-minimal",
-            shell=True,
-        )
-        app_logger.debug("finished latex compilation")
-        print("ERROR" if r.returncode == 1 else "OK")
-        return
-
-        app_logger.debug("moving pdf file")
-        move(
-            LATEX_OUTPUT_FILES_TEMP_DIR / f"{filename_without_extention}.pdf",
-            file_dir / f"{filename_without_extention}.pdf",
-        )
-        app_logger.debug("done moving pdf file")
-
-        app_logger.debug("removing trash files")
-        for file in os.listdir(LATEX_OUTPUT_FILES_TEMP_DIR):
-            if file.endswith((".log", ".aux", ".tex")):
-                os.remove(LATEX_OUTPUT_FILES_TEMP_DIR / file)
-        app_logger.debug("done trash files")
-
+    document_text = build_document_text(data_report)
 
     if use_thread:
-        threading.Thread(target=_run, daemon=True).start()
+        threading.Thread(target=_run, args=(document_text,), daemon=True).start()
     else:
-        _run()
+        _run(document_text)
 
 
 def build_document_text(
-    data_report: OneObjectDataReport,
+    data_report: OneObjectDataReport | MultipleObjectsDataReport,
     project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
 ):
+    if isinstance(data_report, OneObjectDataReport):
+        print("BUILD ONE OBJ DOC")
+        return _build_one_object_report(data_report, project_name)
+    else:
+        return _build_multiple_objects_report(data_report, project_name)
+    
+
+def _build_multiple_objects_report(report: MultipleObjectsDataReport, project_name: str) -> str:
+    objects = report.consumers_params
+    objects_norms = report.consumers
+
     document = (
-        _build_document_top()
-        # + _build_doc_header(project_name)
-        # + _build_document_objects_list()
-        # + _build_objects_info_table()
-        # + _build_sec_calculations()
+        _build_document_top(ignore_img=True)
+        + _build_doc_header(project_name)
+        + _build_document_objects_list(objects)
+        + _build_objects_info_table(objects)
+        # multiple objects data
         + _build_document_end()
     )
 
     return document
 
-def _build_document_top(images_path: str = './', header_image_name: str = "header.png"):
+
+def _build_one_object_report(report: OneObjectDataReport, project_name: str):
+    objects = [report.consumer_params]
+    objects_norms = [report.consumer]
+
+    document = (
+        _build_document_top(ignore_img=True)
+        + _build_doc_header(project_name)
+        + _build_document_objects_list(objects)
+        + _build_objects_info_table(objects)
+        + _build_one_object_seconds_calculation(report)
+        + _build_one_object_hours_calculation(report)
+        + _build_document_end()
+    )
+
+    return document
+
+
+def _build_one_object_hours_calculation(report: OneObjectDataReport):
+    txt = "\\\\ \n"
+
+    txt += """
+\\section{*\\textbf{Максимальный часовойрасход воды (стоков)}} \\\\ \n
+\\noindent
+Максимальный часовойрасход воды (стоков) 𝑞ℎ𝑟 (𝑞ℎ𝑟𝑡𝑜𝑡, 𝑞ℎℎ𝑟, 𝑞ℎ𝑐𝑟), м3, следует определять по формуле: \\\\ \n
+$q_{hr} = 0,005 \\cdot q_{0,hr} \\cdot \\alpha_{hr}$ \\\\ \n
+\\noindent
+Вероятность использования санитарно-технических приборов ℎ для системы в целом следует определять по формуле \\\\ \n
+$P_{hr} = \\frac{3600 \\cdot P \\cdot q_0}{q_{0,hr}}$ \\\\ \n
+""" 
+    txt += f"{report.consumer.name} \\\\ \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$P_{hr}^{tot} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
+        .replace("<a>", str(report.seconds_report.P_total))
+        .replace("<b>", str(report.consumer.device_water_consumption_hot_and_cold_q0tot))
+        .replace("<c>", str(report.consumer.device_water_consumption_hot_and_cold_q0tot_hr))
+    )
+    txt += (
+        "$P_{hr}^{h} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
+        .replace("<a>", str(report.seconds_report.P_hot))
+        .replace("<b>", str(report.consumer.device_water_consumption_hot_or_cold_q0))
+        .replace("<c>", str(report.consumer.device_water_consumption_hot_or_cold_q0_hr))
+    )
+    txt += (
+        "$P_{hr}^{c} = \\frac{3600 \\cdot <a> \\cdot <b>}{<c>}$ \\\\ \n"
+        .replace("<a>", str(report.seconds_report.P_cold))
+        .replace("<b>", str(report.consumer.device_water_consumption_hot_or_cold_q0))
+        .replace("<c>", str(report.consumer.device_water_consumption_hot_or_cold_q0_hr))
+    )
+    txt += "\\\\ \n"
+    txt += "По таблице Б.1 СП30.13330.2020 находим значение коэффициента $\\alpha$. \\\\ \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$P_{hr}^{tot} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
+        .replace("<a>", str())
+        .replace("<b>", str())
+        .replace("<c>", str())
+        .replace("<d>", str())
+    )
+    txt += (
+        "$P_{hr}^{h} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0}^{h} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
+        .replace("<a>", str())
+        .replace("<b>", str())
+        .replace("<c>", str())
+        .replace("<d>", str())
+    )
+    txt += (
+        "$P_{hr}^{c} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q_{hr,0}^{c} = 0,005 \\cdot <c> \\cdot \\<d>$, м3/ч \\\\ \n"
+        .replace("<a>", str())
+        .replace("<b>", str())
+        .replace("<c>", str())
+        .replace("<d>", str())
+    )
+
+    return txt
+
+
+def _build_one_object_seconds_calculation(report: OneObjectDataReport):
+    txt = "\\\\ \n"
+
+    txt += """
+\\section*{\\textbf{Общий секундный расход:}} \\\\ \n
+\\noindent
+Секундный расход воды различными приборами, обслуживающими разных водопотребителей, определяется по формуле 2 СП30.13330.2020 \\\\ \n
+$q^{tot} = 5 \\cdot q_0 \\cdot \\alpha$, л/с \\\\ \n
+\\noindent
+Расчет начинаем с определения вероятности действия приборов различными потребителями: \\\\ \n
+$P = q^{tot}_{hr,u} \\cdot U / (q_0 \\cdot N \\cdot 3600)$ \\\\ \n
+\\\\ \n
+\\noindent
+"""
+    txt += f"{report.consumer.name} \\\\ \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$P^{tot} = <a> \\cdot <b> / <c> \\cdot <d> \\cdot 3600 = <e>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.max_hot_and_cold_water_norms_per_hour)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_and_cold_q0tot)))
+        .replace("<d>", str(_r(report.consumer_params.num_of_devices)))
+        .replace("<e>", str(_r(report.seconds_report.P_total)))
+    )
+    txt += (
+        "$P^{h} = <a> \\cdot <b> / <c> \\cdot <d> \\cdot 3600 = <e>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.max_hot_water_norms_per_hour)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<d>", str(_r(report.consumer_params.num_of_devices_hot)))
+        .replace("<e>", str(_r(report.seconds_report.P_hot)))
+    )
+    txt += (
+        "$P^{h} = <a> \\cdot <b> / <c> \\cdot <d> \\cdot 3600 = <e>$ \\\\ \n"
+        .replace("<a>", str(_r(report.consumer.max_hot_and_cold_water_norms_per_hour - report.consumer.max_hot_water_norms_per_hour)))
+        .replace("<b>", str(_r(report.consumer_params.num_of_measurers)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<d>", str(_r(report.consumer_params.num_of_devices - report.consumer_params.num_of_devices_hot)))
+        .replace("<e>", str(_r(report.seconds_report.P_cold)))
+    )
+    txt += "\\\\ \n"
+    txt += "Формула (3) СП30.13330.2020 По таблице Б.1 СП30.13330.2020 находим значение коэффициента $\\alpha$. \\\\ \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$P^{tot} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q^{tot} = 5 \\cdot <c> \\cdot <d> = <e>$, л/с \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_total)))
+        .replace("<b>", str(_r(report.seconds_report.alpha_total)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_and_cold_q0tot)))
+        .replace("<d>", str(_r(report.seconds_report.alpha_total)))
+        .replace("<e>", str(_r(report.seconds_report.q_total)))
+    )
+    txt += (
+        "$P^{h} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q^{h} = 5 \\cdot <c> \\cdot <d> = <e>$, л/с \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_hot)))
+        .replace("<b>", str(_r(report.seconds_report.alpha_hot)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<d>", str(_r(report.seconds_report.alpha_hot)))
+        .replace("<e>", str(_r(report.seconds_report.q_hot)))
+    )
+    txt += (
+        "$P^{c} = <a> \\rightarrow \\alpha = <b> \\hspace{20px} q^{c} = 5 \\cdot <c> \\cdot <d> = <e>$, л/с \\\\ \n"
+        .replace("<a>", str(_r(report.seconds_report.P_cold)))
+        .replace("<b>", str(_r(report.seconds_report.alpha_cold)))
+        .replace("<c>", str(_r(report.consumer.device_water_consumption_hot_or_cold_q0)))
+        .replace("<d>", str(_r(report.seconds_report.alpha_cold)))
+        .replace("<e>", str(_r(report.seconds_report.q_cold)))
+    )
+
+    txt += "\\\\ \n"
+
+    return txt
+
+
+def _build_document_top(ignore_img: bool = False, images_path: str = './', header_image_name: str = "header.png"):
     txt = (
         "\\documentclass{article} \n"
-        "\\usepackage[T2A]{fontenc} \n"
-        "\\usepackage[russian,english]{babel} \n"
-        "\\usepackage[margin=1.5cm]{geometry} \n"
-        "\\usepackage{multirow} \n"
-        "\\usepackage{times} \n"
-        "\\usepackage{graphicx} \n"
-        "\\graphicspath{ {" + images_path + "} } \n\n"
-        "\\includegraphics[width=18cm, height=5cm]{" + header_image_name + "} \n\n"
-        "\\begin{document} \n"
+        + "\\usepackage[T2A]{fontenc} \n"
+        + "\\usepackage[russian,english]{babel} \n"
+        + "\\usepackage[margin=1.5cm]{geometry} \n"
+        + "\\usepackage{multirow} \n"
+        + "\\usepackage{times} \n"
+        + "\\usepackage{graphicx} \n"
+        + (("\\graphicspath{ {" + images_path + "} } \n\n") if not ignore_img else "")
+        + (("\\includegraphics[width=18cm, height=5cm]{" + header_image_name + "} \n\n") if not ignore_img else "")
+        + "\\begin{document} \n"
     )
 
     return txt
@@ -139,17 +304,17 @@ def _build_doc_header(project_name: str) -> str:
     return txt
 
 
-def _build_document_objects_list(objects: list[tuple[str, int, str]]) -> str:
-    txt = ""
-    for ind, (name, num_of_measurers, measurer) in enumerate(objects):
+def _build_document_objects_list(objects: list[WaterConsumerParams]) -> str:
+    txt = "\\begin{enumerate} \n"
+    for ind, obj in enumerate(objects):
         txt += (
-            f"{ind+1}. {name} - {num_of_measurers} {measurer} \\\\ \n"
+            f"\\item {obj.consumer_norms.name} - {obj.num_of_measurers} {obj.consumer_norms.measurer.value} \\\\ \n"
         )
-    txt += "\n"
+    txt += "\\end{enumerate}\n"
     return txt
 
 
-def _build_objects_info_table(objects: list[WaterConsumerNorms]) -> str:
+def _build_objects_info_table(objects: list[WaterConsumerParams]) -> str:
     # https://www.tablesgenerator.com/
 
     table = """
@@ -197,21 +362,39 @@ def _build_objects_info_table(objects: list[WaterConsumerNorms]) -> str:
 \\end{table}\\textbf{} \n\n
 """
 
-    for obj in objects:
-        table += """
-\\multicolumn{1}{|p{3cm}|}{<name>} & \n 
-\\multicolumn{1}{ p{1cm}|}{<>} & \n 
-\\multicolumn{1}{ p{1cm}|}{<>} & \n 
-\\multicolumn{1}{ p{1cm}|}{<>} & \n
-\\multicolumn{1}{ p{1cm}|}{<>} & \n
-\\multicolumn{1}{ p{1cm}|}{<>} & \n
-\\multicolumn{1}{ p{1cm}|}{<>} & \n
-\\multicolumn{1}{ p{3cm}|}{<>} & \n 
-\\multicolumn{1}{ p{2cm}|}{<>}  \n \\\\ 
+    table_row_base = """
+\\multicolumn{1}{|p{3cm}|}{<a>} & \n 
+\\multicolumn{1}{ p{1cm}|}{<b>} & \n 
+\\multicolumn{1}{ p{1cm}|}{<c>} & \n 
+\\multicolumn{1}{ p{1cm}|}{<d>} & \n
+\\multicolumn{1}{ p{1cm}|}{<e>} & \n
+\\multicolumn{1}{ p{1cm}|}{<f>} & \n
+\\multicolumn{1}{ p{1cm}|}{<g>} & \n
+\\multicolumn{1}{ p{3cm}|}{<h>} & \n 
+\\multicolumn{1}{ p{2cm}|}{<i>}  \n \\\\ 
 \\hline
-""".replace("<name>", obj.name)
+"""
+
+    print("BITCH")
+    for obj in objects:
+        try:
+            table += (
+                table_row_base
+                .replace("<a>", obj.consumer_norms.name)
+                .replace("<b>", obj.consumer_norms.measurer.value)
+                .replace("<c>", str(obj.num_of_measurers))
+                .replace("<d>", str(obj.consumer_norms.avg_hot_and_cold_water_norms_per_day))
+                .replace("<e>", str(obj.consumer_norms.avg_hot_water_norms_per_day))
+                .replace("<f>", str(obj.consumer_norms.max_hot_and_cold_water_norms_per_hour))
+                .replace("<g>", str(obj.consumer_norms.max_hot_water_norms_per_hour))
+                .replace("<h>", f"{obj.consumer_norms.device_water_consumption_hot_and_cold_q0tot} ({obj.consumer_norms.device_water_consumption_hot_and_cold_q0tot_hr})")
+                .replace("<i>", f"{obj.consumer_norms.device_water_consumption_hot_or_cold_q0} ({obj.consumer_norms.device_water_consumption_hot_or_cold_q0_hr})")
+            )
+        except Exception as err:
+            print(err.__class__, err)
 
     table += table_bottom
+    print("BITCH END")
     
     txt = (
         "\\section*{Норма расхода воды}\\\\ \n"
@@ -227,7 +410,7 @@ def _build_sec_calculations() -> str:
         "\\end{center} \n"
         "Секундный расход воды  различными  приборами, обслуживающими разных водопотребителей, определяется по формуле 2 СНиП 2.04.01-85:\\\\ \n"
         "\\begin{center} \n"
-        "$q^{tot} = 5 \\cdot q_0 \\cdot \\varalpha$, л/с \n"
+        "$q^{tot} = 5 \\cdot q_0 \\cdot \\alpha$, л/с \n"
         "\\end{center} \n"
         "Расчет начинаем с определения вероятности действия приборов различными потребителями:\\\\ \n"
     )
@@ -291,13 +474,3 @@ def _build_result_table():
 \\end{tabular}
 \\end{table}\textbf{}
 """
-
-def _build_NP_formula(a: float, b: float, c: float, res: float):
-    top_ = "{tot1}"
-    bottom_ = ""
-    return f"$NP^{top_}_{bottom_} = {a} \\cdot {b} / {c} \\cdot 3600 = {res}$"
-
-
-# with open("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", "w", encoding="utf-8") as f:
-#     f.write(build_document_text())
-# prepare_latex("C:\\Users\\neyen\\OneDrive\\Рабочий стол\\e.tex", use_thread=False)

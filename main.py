@@ -2,6 +2,7 @@ __version__ = "0.1.0"
 
 
 import json
+import os
 import dearpygui.dearpygui as dpg
 
 from latex import prepare_latex
@@ -15,7 +16,7 @@ from mathematics import (
     WaterConsumerNorms,
 )
 
-from settings import app_logger
+from settings import app_logger, CONF
 
 
 def _mk_handler(func: dpg.Callable, *args, **kwargs):
@@ -67,7 +68,7 @@ def show_error(message: str):
         dpg.add_text(message)
 
 
-def create_report():
+def create_report(project_ctx: ProjectContext, variant: str):
     import datetime
     dt_now = datetime.datetime.now().strftime("%d.%m.%Y")
     report_fname = f"Отчет по водопотреблению {dt_now}"
@@ -81,7 +82,14 @@ def create_report():
         initialfile=report_fname,
     )
 
-    prepare_latex(fpath, **{})
+    try:
+        prepare_latex(fpath, project_ctx, variant)
+    except OSError:
+        show_error("Операционная система не поддерживает компиляцию в LaTeX. Мы работаем над этим ;)")
+    except TypeError:
+        show_error("Водопотребители не добавлены. Отсутствуют данные для отчета")
+    except:
+        show_error("Ошибка сборки документа")
 
 
 def draw_consumer_card(
@@ -94,9 +102,11 @@ def draw_consumer_card(
 ):
     consumer_type = dpg.get_value(f"{variant}_consumer_value")
     cons: WaterConsumerNorms = APP_CONTEXT["WATER_CONSUMERS"][consumer_type]
+    cons.upd_id()
 
     num_of_devices_less_200 = dpg.get_value(f"{variant}_num_of_devices_check_value")
     num_of_devices = dpg.get_value(f"{variant}_num_of_devices_input_value")
+    num_of_devices_hot = dpg.get_value(f"{variant}_num_of_devices_hot_input")
     num_of_measurers = dpg.get_value(f"{variant}_num_of_measurers_input_value")
 
     if card is not None:
@@ -114,19 +124,31 @@ def draw_consumer_card(
         del APP_CONTEXT["CHOOSEN_CONSUMERS"][cons.id]
         dpg.delete_item(win)
         dpg.delete_item(f"spacer_{cons.id}")
+        # TODO: THIS ID DOESNT WORK
         project_ctx.remove_consumer(variant, cons)
 
     if not draw_only:
-        print("add object")
-        project_ctx.add_variant_object(variant, cons, num_of_measurers, num_of_devices_less_200, num_of_devices)
+        project_ctx.add_variant_object(
+            variant,
+            cons,
+            num_of_measurers,
+            num_of_devices,
+            num_of_devices_hot,
+            num_of_devices_less_200
+        )
 
-    with dpg.child_window(parent=parent, height=460, width=460) as cwin:
+    with dpg.child_window(parent=parent, height=560, width=460) as cwin:
         with dpg.group(horizontal=True):
             dpg.add_button(label="X", callback=_mk_handler(_delcons))
             dpg.add_separator(label=cons.name)
 
         dpg.add_spacer(height=3)
         dpg.add_text(f"ID: {cons.id}")
+
+        dpg.add_spacer(height=3)
+        dpg.add_text(f"Количество измерителей: {num_of_measurers}")
+        dpg.add_text(f"Количество приборов всего: {num_of_devices}")
+        dpg.add_text(f"Количество приборов горячей воды: {num_of_devices_hot}")
 
         dpg.add_spacer(height=10)
         dpg.add_text("Норма расхода воды")
@@ -143,8 +165,8 @@ def draw_consumer_card(
 
         dpg.add_spacer(height=10)
         dpg.add_text(f"Расход воды прибором, л/с (л/ч)")
-        dpg.add_text(f"Общий (холодной и горячей) qtoto: {cons.device_water_consumption_hot_and_cold}")
-        dpg.add_text(f"Холодной или горячей: {cons.device_water_consumption_hot_or_cold}")
+        dpg.add_text(f"Общий (холодной и горячей) qtoto: {cons.device_water_consumption_hot_and_cold_q0tot} ({cons.device_water_consumption_hot_and_cold_q0tot_hr})")
+        dpg.add_text(f"Холодной или горячей: {cons.device_water_consumption_hot_or_cold_q0} ({cons.device_water_consumption_hot_or_cold_q0_hr})")
 
         dpg.add_spacer(height=10)
         dpg.add_text(f"Т,ч: {cons.T}")
@@ -160,13 +182,16 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
         print(enable)
         if enable is True:
             dpg.disable_item(f"{parent_tab}_num_of_devices_input")
+            dpg.disable_item(f"{parent_tab}_num_of_devices_hot_input")
         else:
+            dpg.enable_item(f"{parent_tab}_num_of_devices_hot_input")
             dpg.enable_item(f"{parent_tab}_num_of_devices_input")
 
     with dpg.value_registry():
         dpg.add_string_value(default_value="23 Бани: душевая кабина", tag=f"{parent_tab}_consumer_value")
         dpg.add_bool_value(default_value=False, tag=f"{parent_tab}_num_of_devices_check_value")
         dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_devices_input_value")
+        dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_devices_hot_input_value")
         dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_measurers_input_value")
 
     with dpg.group(horizontal=True, parent=parent_tab) as mwin:
@@ -189,17 +214,24 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                     tag=f"{parent_tab}_num_of_measurers_input",
                     source=f"{parent_tab}_num_of_measurers_input_value")
                 dpg.add_spacer(height=10)
-                dpg.add_text("Количество приборов")
                 with dpg.group(horizontal=True):
-                    dpg.add_input_int(
-                        min_clamped=True,
-                        tag=f"{parent_tab}_num_of_devices_input",
-                        source=f"{parent_tab}_num_of_devices_input_value")
+                    dpg.add_text("Количество приборов всего")
                     dpg.add_checkbox(
                         label="> 200",
                         callback=mark_num_of_devices,
                         tag=f"{parent_tab}_num_of_devices_checkbox",
                         source=f"{parent_tab}_num_of_devices_check_value")
+                dpg.add_input_int(
+                    min_clamped=True,
+                    tag=f"{parent_tab}_num_of_devices_input",
+                    source=f"{parent_tab}_num_of_devices_input_value")
+                dpg.add_spacer(height=5)
+                dpg.add_text("Количество приборов с горячей водой")
+                dpg.add_input_int(
+                    min_clamped=True,
+                    tag=f"{parent_tab}_num_of_devices_hot_input",
+                    source=f"{parent_tab}_num_of_devices_hot_input_value")
+
                 dpg.add_spacer(height=10)
 
                 with dpg.group(horizontal=True):
@@ -217,7 +249,11 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                     dpg.add_button(
                         label="Сформировать отчет",
                         height=30, width=240,
-                        callback=_mk_handler(create_report)
+                        callback=_mk_handler(
+                            create_report,
+                            project_ctx=project_ctx,
+                            variant=parent_tab
+                        )
                     )
 
             with dpg.child_window(parent=mwin, tag=f"right_var_win_{parent_tab}", border=False) as cw:
@@ -425,8 +461,9 @@ def prep_font():
         # app_logger.debug(f"cwd: {os.getcwd()}")
         # font_path = f"{PROJECT_ROOT}\\assets\\notomono-regular.ttf".replace("\\", "/")
 
-        font_path = "./assets/notomono-regular.ttf"
-
+        font_path = os.path.join(CONF.ASSETS_FOLDER, "notomono-regular.ttf")
+        app_logger.debug(f"FONT: {font_path}")
+       
         with dpg.font(font_path, 18, default_font=True, tag="font-ru"):
             dpg.add_font_range_hint(dpg.mvFontRangeHint_Cyrillic)
             dpg.bind_font("font-ru")
