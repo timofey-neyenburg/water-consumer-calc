@@ -103,6 +103,9 @@ class WaterConsumerParams:
     num_of_devices: int
     num_of_devices_hot: int
     num_of_measurers: int
+    temp_hot: int
+    temp_cold: int
+    work_hours: int
 
 
 @dataclass
@@ -389,8 +392,8 @@ def calculate_consumption_for_one_object(consumer_params: WaterConsumerParams) -
 
     max_hour_consumption = calculate_max_hour_consumption(consumer_params.consumer_norms, seconds_consumption)
     avg_hour_consumption = calculate_avg_hour_consumption(consumer_params.consumer_norms, consumer_params.num_of_measurers)
-    heat_consumption = calculate_heat_consumption(avg_hour_consumption, max_hour_consumption)
-    total_day_consumption = calculate_total_day_consumption(consumer_params.consumer_norms, consumer_params.num_of_measurers)
+    heat_consumption = calculate_heat_consumption(consumer_params, avg_hour_consumption, max_hour_consumption)
+    total_day_consumption = calculate_total_day_consumption(consumer_params, consumer_params.num_of_measurers)
     grass_watering = calculate_grass_watering(consumer_params.num_of_measurers)
 
     total_object_consumption = calculate_total_object_consumption(
@@ -455,35 +458,36 @@ def calculate_grass_watering(num_of_measurers: int) -> GrassWateringReportData:
 
 
 def calculate_total_day_consumption(
-    consumer: WaterConsumerNorms,
+    consumer_params: WaterConsumerParams,
     num_of_measurers: int) -> TotalDayConsumptionReportData:
 
-    # TODO - fuck me - how to calculate it?
-
-    # TODO: MAGIC NUMBER
-    working_hours = _d(4)
+    # TODO: CHECK
+    if consumer_params.consumer_norms.T == 24:
+        working_shifts = _d(1)
+    else:
+        working_shifts = _d(consumer_params.work_hours) / _d(consumer_params.consumer_norms.T)
 
     Q_total = (
-        _d(consumer.avg_hot_and_cold_water_norms_per_day)
+        _d(consumer_params.consumer_norms.avg_hot_and_cold_water_norms_per_day)
         * num_of_measurers
-        * working_hours
+        * working_shifts
         / _d(1000)
     )
     Q_hot = (
         (
-            _d(consumer.avg_hot_water_norms_per_day)
+            _d(consumer_params.consumer_norms.avg_hot_water_norms_per_day)
         )
         * num_of_measurers
-        * working_hours
+        * working_shifts
         / _d(1000)
     )
     Q_cold = (
         (
-            _d(consumer.avg_hot_and_cold_water_norms_per_day) 
-            - _d(consumer.avg_hot_water_norms_per_day)
+            _d(consumer_params.consumer_norms.avg_hot_and_cold_water_norms_per_day) 
+            - _d(consumer_params.consumer_norms.avg_hot_water_norms_per_day)
         )
         * num_of_measurers
-        * working_hours
+        * working_shifts
         / _d(1000)
     )
 
@@ -496,19 +500,22 @@ def calculate_total_day_consumption(
 
 
 def calculate_heat_consumption(
+    consumer_params: WaterConsumerParams,
     avg_hour_consumption: AvgHourConsumptionReportData,
     max_hour_consumption: MaxHourConsumptionReportData) -> HeatConsumptionReportData:
+
+    temp_diff = _d(consumer_params.temp_hot) - _d(consumer_params.temp_cold)
 
     Qht = (
         _d(1.16) 
         * avg_hour_consumption.q_hot 
-        * _d(61 - 5)
+        * temp_diff
         + max_hour_consumption.q_hot * _d(0.3)
     )
     Qhrt = (
         _d(1.16) 
         * max_hour_consumption.q_hot 
-        * _d(61 - 5)
+        * temp_diff
         + max_hour_consumption.q_hot * _d(0.3)
     )
 

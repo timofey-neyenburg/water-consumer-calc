@@ -185,7 +185,10 @@ class ProjectContext:
                     consumer_norms=APP_CONTEXT["WATER_CONSUMERS"][obj["name"]],
                     num_of_devices=obj["num_of_devices"],
                     num_of_devices_hot=obj["num_of_devices_hot"],
-                    num_of_measurers=obj["num_of_measurers"]
+                    num_of_measurers=obj["num_of_measurers"],
+                    temp_cold=obj["temp_cold"],
+                    temp_hot=obj["temp_hot"],
+                    work_hours=obj["work_hours"]
                 )
                 for obj in self._data["variants_data"][variant_tag]["objects"]
             ]
@@ -198,6 +201,9 @@ class ProjectContext:
         num_of_measurers: int,
         num_of_devcies: int,
         num_of_devcies_hot: int,
+        temp_hot: int,
+        temp_cold: int,
+        work_hours: int,
         num_of_devies_less_200: bool = True,
     ):
         if variant_tag in self._data["variants_data"]:
@@ -208,6 +214,9 @@ class ProjectContext:
                 "are_there_devices_less_then_200": num_of_devies_less_200,
                 "num_of_devices": num_of_devcies,
                 "num_of_devices_hot": num_of_devcies_hot,
+                "temp_hot": temp_hot,
+                "temp_cold": temp_cold,
+                "work_hours": work_hours,
             })
         self.dump()
     

@@ -108,6 +108,9 @@ def draw_consumer_card(
     num_of_devices = dpg.get_value(f"{variant}_num_of_devices_input_value")
     num_of_devices_hot = dpg.get_value(f"{variant}_num_of_devices_hot_input")
     num_of_measurers = dpg.get_value(f"{variant}_num_of_measurers_input_value")
+    temp_hot = dpg.get_value(f"{variant}_temp_hot")
+    temp_cold = dpg.get_value(f"{variant}_temp_cold")
+    work_hours = dpg.get_value(f"{variant}_work_hours")
 
     if card is not None:
         if card_num_of_visitors is None:
@@ -134,10 +137,13 @@ def draw_consumer_card(
             num_of_measurers,
             num_of_devices,
             num_of_devices_hot,
+            temp_hot,
+            temp_cold,
+            work_hours,
             num_of_devices_less_200
         )
 
-    with dpg.child_window(parent=parent, height=560, width=460) as cwin:
+    with dpg.child_window(parent=parent, height=660, width=460) as cwin:
         with dpg.group(horizontal=True):
             dpg.add_button(label="X", callback=_mk_handler(_delcons))
             dpg.add_separator(label=cons.name)
@@ -169,6 +175,13 @@ def draw_consumer_card(
         dpg.add_text(f"Холодной или горячей: {cons.device_water_consumption_hot_or_cold_q0} ({cons.device_water_consumption_hot_or_cold_q0_hr})")
 
         dpg.add_spacer(height=10)
+        dpg.add_text(f"Температура горячей воды: {temp_hot}")
+        dpg.add_text(f"Температура холодной воды: {temp_cold}")
+
+        dpg.add_spacer(height=10)
+        dpg.add_text(f"Рабочие часы в сутках: {work_hours}")
+
+        dpg.add_spacer(height=10)
         dpg.add_text(f"Т,ч: {cons.T}")
 
     dpg.add_spacer(parent=parent, height=10, tag=f"spacer_{cons.id}")
@@ -189,10 +202,17 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
 
     with dpg.value_registry():
         dpg.add_string_value(default_value="23 Бани: душевая кабина", tag=f"{parent_tab}_consumer_value")
+
         dpg.add_bool_value(default_value=False, tag=f"{parent_tab}_num_of_devices_check_value")
         dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_devices_input_value")
         dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_devices_hot_input_value")
+
         dpg.add_int_value(default_value=1, tag=f"{parent_tab}_num_of_measurers_input_value")
+
+        dpg.add_int_value(default_value=5, tag=f"{parent_tab}_temp_cold")
+        dpg.add_int_value(default_value=61, tag=f"{parent_tab}_temp_hot")
+
+        dpg.add_int_value(default_value=12, tag=f"{parent_tab}_work_hours")
 
     with dpg.group(horizontal=True, parent=parent_tab) as mwin:
         with dpg.child_window(width=APP_CONTEXT["LEFT_CHILD_WIN_W"], border=False):
@@ -226,11 +246,29 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                     tag=f"{parent_tab}_num_of_devices_input",
                     source=f"{parent_tab}_num_of_devices_input_value")
                 dpg.add_spacer(height=5)
-                dpg.add_text("Количество приборов с горячей водой")
+                dpg.add_text("Количество приборов горячей воды")
                 dpg.add_input_int(
                     min_clamped=True,
                     tag=f"{parent_tab}_num_of_devices_hot_input",
                     source=f"{parent_tab}_num_of_devices_hot_input_value")
+                dpg.add_spacer(height=5)
+                dpg.add_text("Температура горячей воды")
+                dpg.add_input_int(
+                    min_clamped=True,
+                    tag=f"{parent_tab}_temp_hot_input",
+                    source=f"{parent_tab}_temp_hot")
+                dpg.add_spacer(height=5)
+                dpg.add_text("Температура холодной воды")
+                dpg.add_input_int(
+                    min_clamped=True,
+                    tag=f"{parent_tab}_temp_cold_input",
+                    source=f"{parent_tab}_cold_hot")
+                dpg.add_spacer(height=5)
+                dpg.add_text("Время работы в сутки (ч)")
+                dpg.add_input_int(
+                    min_clamped=True,
+                    tag=f"{parent_tab}_work_hours_input",
+                    source=f"{parent_tab}_work_hours")
 
                 dpg.add_spacer(height=10)
 
