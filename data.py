@@ -180,6 +180,7 @@ class ProjectContext:
     
     def get_variant_objects(self, variant_tag: str) -> list[WaterConsumerParams]:
         if variant_tag in self._data["variants_data"]:
+            print(self._data["variants_data"][variant_tag]["objects"])
             return [
                 WaterConsumerParams(
                     consumer_norms=APP_CONTEXT["WATER_CONSUMERS"][obj["name"]],

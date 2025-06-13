@@ -28,6 +28,7 @@ class AppSettings(BaseSettings):
 
     @property
     def ASSETS_FOLDER(self) -> Path | str:
+        print(self.MODE)
         if self.MODE == AppMode.DEV:
             if os.name == 'nt':
                 return ".\\water-calc-assets"

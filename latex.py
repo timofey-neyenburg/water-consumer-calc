@@ -95,10 +95,9 @@ def prepare_latex(
 
 def build_document_text(
     data_report: OneObjectDataReport | MultipleObjectsDataReport,
-    project_name: str = "Предложение по застройке территории на правом берегу реки Иртыш в г.Омске.",
+    project_name: str
 ):
     if isinstance(data_report, OneObjectDataReport):
-        print("BUILD ONE OBJ DOC")
         return _build_one_object_report(data_report, project_name)
     else:
         return _build_multiple_objects_report(data_report, project_name)
@@ -106,14 +105,16 @@ def build_document_text(
 
 def _build_multiple_objects_report(report: MultipleObjectsDataReport, project_name: str) -> str:
     objects = report.consumers_params
-    objects_norms = report.consumers
 
     document = (
         _build_document_top(ignore_img=True)
         + _build_doc_header(project_name)
         + _build_document_objects_list(objects)
         + _build_objects_info_table(objects)
-        # multiple objects data
+        + _build_objects_seconds_calculation(report)
+        + _build_objects_hours_calculation(report)
+        + _build_objects_heat_consumption_calculation(report)
+        + _build_objects_total_day_calculation(report)
         + _build_document_end()
     )
 
@@ -122,7 +123,6 @@ def _build_multiple_objects_report(report: MultipleObjectsDataReport, project_na
 
 def _build_one_object_report(report: OneObjectDataReport, project_name: str):
     objects = [report.consumer_params]
-    objects_norms = [report.consumer]
 
     document = (
         _build_document_top(ignore_img=True)
@@ -140,6 +140,28 @@ def _build_one_object_report(report: OneObjectDataReport, project_name: str):
 
     return document
 
+
+def _build_objects_seconds_calculation(report: MultipleObjectsDataReport) -> str:
+    txt = "\\\\ \n"
+
+    return txt
+
+
+def _build_objects_hours_calculation(report: MultipleObjectsDataReport) -> str:
+    txt = "\\\\ \n"
+
+    return txt
+
+def _build_objects_heat_consumption_calculation(report: MultipleObjectsDataReport) -> str:
+    txt = "\\\\ \n"
+
+    return txt
+
+
+def _build_objects_total_day_calculation(report: MultipleObjectsDataReport) -> str:
+    txt = "\\\\ \n"
+
+    return txt
 
 
 def _build_one_object_total_day_calculation(report: OneObjectDataReport) -> str:

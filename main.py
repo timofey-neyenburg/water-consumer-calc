@@ -1,6 +1,7 @@
 __version__ = "0.1.0"
 
 
+from decimal import ROUND_UP, Decimal
 import json
 import os
 import dearpygui.dearpygui as dpg
@@ -13,7 +14,10 @@ from data import (
     ProjectContext,
 )
 from mathematics import (
+    OneObjectDataReport,
     WaterConsumerNorms,
+    calculate_consumption_for_multiple_objects,
+    calculate_consumption_for_one_object,
 )
 
 from settings import app_logger, CONF
@@ -199,6 +203,118 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
         else:
             dpg.enable_item(f"{parent_tab}_num_of_devices_hot_input")
             dpg.enable_item(f"{parent_tab}_num_of_devices_input")
+    
+
+    def _update_alphas_and_make_report():
+        pass
+    
+    def show_report_modal():
+        viewport_width = dpg.get_viewport_client_width()
+        viewport_height = dpg.get_viewport_client_height()
+
+        modal_width = 450
+        modal_height = 400
+    
+        objects = project_ctx.get_variant_objects(parent_tab)
+        print("OBJECTS:", objects)
+        if len(objects) == 0:
+            show_error("Отсутствуют объекты для расчета")
+
+        if len(objects) > 1:
+            data_report = calculate_consumption_for_multiple_objects(objects)
+        else:
+            data_report = calculate_consumption_for_one_object(objects[0])
+        
+        def rd(d: Decimal) -> float:
+            return float(d.quantize(Decimal(".001"), rounding=ROUND_UP))
+        
+        try:
+            with dpg.value_registry():
+                if isinstance(data_report, OneObjectDataReport):
+                    print(rd(data_report.seconds_report.alpha_total))
+                    dpg.add_float_value(default_value=data_report.seconds_report.alpha_total, tag=f"{parent_tab}_preedit_oo_seconds_alpha_tot")
+                    dpg.add_float_value(default_value=data_report.seconds_report.alpha_hot, tag=f"{parent_tab}_preedit_oo_seconds_alpha_hot")
+                    dpg.add_float_value(default_value=data_report.seconds_report.alpha_cold, tag=f"{parent_tab}_preedit_oo_seconds_alpha_cold")
+                    dpg.add_float_value(default_value=data_report.hours_max_report.alpha_total, tag=f"{parent_tab}_preedit_oo_max_hour_alpha_tot")
+                    dpg.add_float_value(default_value=data_report.hours_max_report.alpha_hot, tag=f"{parent_tab}_preedit_oo_max_hour_alpha_hot")
+                    dpg.add_float_value(default_value=data_report.hours_max_report.alpha_cold, tag=f"{parent_tab}_preedit_oo_max_hour_alpha_cold")
+                else:
+                    dpg.add_float_value(default_value=data_report.seconds_consumption.alpha_tot, tag=f"{parent_tab}_preedit_mo_seconds_alpha_tot")
+                    dpg.add_float_value(default_value=data_report.seconds_consumption.alpha_h, tag=f"{parent_tab}_preedit_mo_seconds_alpha_hot")
+                    dpg.add_float_value(default_value=data_report.seconds_consumption.alpha_c, tag=f"{parent_tab}_preedit_mo_seconds_alpha_cold")
+                    dpg.add_float_value(default_value=data_report.hours_consumption.alpha_hr_tot, tag=f"{parent_tab}_preedit_mo_hour_alpha_tot")
+                    dpg.add_float_value(default_value=data_report.hours_consumption.alpha_hr_h, tag=f"{parent_tab}_preedit_mo_hour_alpha_hot")
+                    dpg.add_float_value(default_value=data_report.hours_consumption.alpha_hr_c, tag=f"{parent_tab}_preedit_mo_hour_alpha_cold")
+        except Exception as err:
+            app_logger.warning(str(err))
+
+
+        with dpg.window(
+            label="Предварительный просмотр расчетов",
+            width=modal_width,
+            height=modal_height,
+            modal=True,
+            pos=[viewport_width // 2 - modal_width // 2, viewport_height // 3]
+        ):
+            if isinstance(data_report, OneObjectDataReport):
+                dpg.add_text("Общий секундный расход")
+                dpg.add_spacer(height=10)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"P_tot = {rd(data_report.seconds_report.P_total)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_seconds_alpha_tot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"P_h = {rd(data_report.seconds_report.P_hot)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_seconds_alpha_hot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"P_c = {rd(data_report.seconds_report.P_cold)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_seconds_alpha_cold", width=150)
+                dpg.add_spacer(height=10)
+                dpg.add_text("Максимальный часовой расход")
+                dpg.add_spacer(height=10)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"Phr_tot = {rd(data_report.hours_max_report.P_total)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_max_hour_alpha_tot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"Phr_h = {rd(data_report.hours_max_report.P_hot)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_max_hour_alpha_hot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"Phr_c = {rd(data_report.hours_max_report.P_cold)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_oo_max_hour_alpha_cold", width=150)
+            else:
+                dpg.add_text("Общий секундный расход")
+                dpg.add_spacer(height=10)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_tot = {rd(data_report.seconds_consumption.NPs_tot_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_seconds_alpha_tot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_h = {rd(data_report.seconds_consumption.NPs_h_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_seconds_alpha_hot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_c = {rd(data_report.seconds_consumption.NPs_c_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_seconds_alpha_cold", width=150)
+                dpg.add_spacer(height=10)
+                dpg.add_text("Общий часовой расход")
+                dpg.add_spacer(height=10)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_tot = {rd(data_report.hours_consumption.NPhrs_tot_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_hour_alpha_tot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_h = {rd(data_report.hours_consumption.NPhrs_h_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_hour_alpha_hot", width=150)
+                with dpg.group(horizontal=True):
+                    dpg.add_text(f"NP_c = {rd(data_report.hours_consumption.NPhrs_c_sum)} -> alpha = ")
+                    dpg.add_input_float(source=f"{parent_tab}_preedit_mo_hour_alpha_cold", width=150)
+
+            dpg.add_spacer(height=20)
+            dpg.add_button(
+                label="Сохранить",
+                height=30, width=-1,
+                callback=_mk_handler(
+                    create_report,
+                    project_ctx=project_ctx,
+                    variant=parent_tab
+                )
+            )
 
     with dpg.value_registry():
         dpg.add_string_value(default_value="23 Бани: душевая кабина", tag=f"{parent_tab}_consumer_value")
@@ -287,10 +403,13 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                     dpg.add_button(
                         label="Сформировать отчет",
                         height=30, width=240,
+                        # callback=_mk_handler(
+                        #     create_report,
+                        #     project_ctx=project_ctx,
+                        #     variant=parent_tab
+                        # )
                         callback=_mk_handler(
-                            create_report,
-                            project_ctx=project_ctx,
-                            variant=parent_tab
+                            show_report_modal
                         )
                     )
 

@@ -1,3 +1,5 @@
+
+
 import PyInstaller.__main__
 
 with open(".env", "w") as f:
@@ -15,3 +17,4 @@ PyInstaller.__main__.run([
     '-n=waterconsumption-calc',
     '-i=./icon.ico',
 ])
+
