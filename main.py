@@ -6,7 +6,7 @@ import json
 import os
 import dearpygui.dearpygui as dpg
 
-from latex import prepare_latex
+from latex import StopSignal, prepare_latex
 from data import (
     PROJECT_ROOT,
     UPI,
@@ -14,6 +14,7 @@ from data import (
     ProjectContext,
 )
 from mathematics import (
+    MultipleObjectsDataReport,
     OneObjectDataReport,
     WaterConsumerNorms,
     calculate_consumption_for_multiple_objects,
@@ -92,6 +93,8 @@ def create_report(project_ctx: ProjectContext, variant: str):
         show_error("Операционная система не поддерживает компиляцию в LaTeX. Мы работаем над этим ;)")
     except TypeError:
         show_error("Водопотребители не добавлены. Отсутствуют данные для отчета")
+    except StopSignal:
+        show_error("Документ успешно сохранен")
     except:
         show_error("Ошибка сборки документа")
 
@@ -205,8 +208,24 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
             dpg.enable_item(f"{parent_tab}_num_of_devices_input")
     
 
-    def _update_alphas_and_make_report():
-        pass
+    def _update_alphas_and_make_report(data_report: OneObjectDataReport | MultipleObjectsDataReport, project_ctx: ProjectContext, variant: str):
+        if isinstance(data_report, OneObjectDataReport):
+            data_report.seconds_report.alpha_total = dpg.get_value(f"{parent_tab}_preedit_oo_seconds_alpha_tot")
+            data_report.seconds_report.alpha_hot = dpg.get_value(f"{parent_tab}_preedit_oo_seconds_alpha_hot")
+            data_report.seconds_report.alpha_cold = dpg.get_value(f"{parent_tab}_preedit_oo_seconds_alpha_cold")
+            data_report.hours_max_report.alpha_total = dpg.get_value(f"{parent_tab}_preedit_oo_max_hour_alpha_tot")
+            data_report.hours_max_report.alpha_hot = dpg.get_value(f"{parent_tab}_preedit_oo_max_hour_alpha_hot")
+            data_report.hours_max_report.alpha_cold = dpg.get_value(f"{parent_tab}_preedit_oo_max_hour_alpha_cold")
+        else:
+            data_report.seconds_consumption.alpha_tot = dpg.get_value(f"{parent_tab}_preedit_mo_seconds_alpha_tot")
+            data_report.seconds_consumption.alpha_h = dpg.get_value(f"{parent_tab}_preedit_mo_seconds_alpha_hot")
+            data_report.seconds_consumption.alpha_c = dpg.get_value(f"{parent_tab}_preedit_mo_seconds_alpha_cold")
+            data_report.hours_consumption.alpha_hr_tot = dpg.get_value(f"{parent_tab}_preedit_mo_hour_alpha_tot")
+            data_report.hours_consumption.alpha_hr_h = dpg.get_value(f"{parent_tab}_preedit_mo_hour_alpha_hot")
+            data_report.hours_consumption.alpha_hr_c = dpg.get_value(f"{parent_tab}_preedit_mo_hour_alpha_cold")
+        
+        create_report(project_ctx, variant)
+        dpg.delete_item("preedit_modal")
     
     def show_report_modal():
         viewport_width = dpg.get_viewport_client_width()
@@ -216,7 +235,6 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
         modal_height = 400
     
         objects = project_ctx.get_variant_objects(parent_tab)
-        print("OBJECTS:", objects)
         if len(objects) == 0:
             show_error("Отсутствуют объекты для расчета")
 
@@ -254,7 +272,8 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
             width=modal_width,
             height=modal_height,
             modal=True,
-            pos=[viewport_width // 2 - modal_width // 2, viewport_height // 3]
+            pos=[viewport_width // 2 - modal_width // 2, viewport_height // 3],
+            tag="preedit_modal"
         ):
             if isinstance(data_report, OneObjectDataReport):
                 dpg.add_text("Общий секундный расход")
@@ -310,7 +329,8 @@ def variant_screen(parent_tab: str, project_ctx: ProjectContext):
                 label="Сохранить",
                 height=30, width=-1,
                 callback=_mk_handler(
-                    create_report,
+                    _update_alphas_and_make_report,
+                    data_report=data_report,
                     project_ctx=project_ctx,
                     variant=parent_tab
                 )

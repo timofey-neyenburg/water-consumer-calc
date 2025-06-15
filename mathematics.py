@@ -22,6 +22,23 @@ def aproximate_alpha(v: Decimal) -> Decimal:
     return v
 
 
+# def approximate(NP: Decimal, less_200: bool = True) -> Decimal:
+#     if less_200:
+#         model = TwoVariableApproximator(nn.ReLU)                                                # type:ignore
+#     else:
+#         model = AlphaOneDimensionalApproximator(nn.ReLU)                                                # type:ignore
+
+#     model.load_state_dict(torch.load(CONF.MODEL_PATH))                                      # type:ignore
+#     model.eval()
+
+#     with torch.no_grad():                                                                   # type:ignore
+#         inp = torch.tensor(float(NP), dtype=torch.float32)                                         # type:ignore
+#         v = model(inp).squeeze(1).float()                                                # type:ignore
+    
+#     return Decimal(v)
+ 
+# aproximate_alpha = lambda v: approximate(v, N < 200)                                      # type:ignore
+
 getcontext().prec = 8
 
 
@@ -242,6 +259,9 @@ class MultipleObjectsSecondsConsumptionDataReport:
     q_tot: Decimal
     q_h: Decimal
     q_c: Decimal
+    q0_tot: Decimal
+    q0_h: Decimal
+    q0_c: Decimal
 
 
 @dataclass
@@ -259,6 +279,9 @@ class MultipleObjectsTotalHoursConsumptionDataReport:
     qhr_tot: Decimal
     qhr_h: Decimal
     qhr_c: Decimal
+    q0hr_tot: Decimal
+    q0hr_c: Decimal
+    q0hr_h: Decimal
 
 
 @dataclass
@@ -367,6 +390,10 @@ def calculate_multiple_objects_hour_consumption(
     NPhr_hs: list[Decimal] = []
     NPhr_cs: list[Decimal] = []
 
+    NPhr_tot_0 = 0
+    NPhr_hot_0 = 0
+    NPhr_cold_0 = 0
+
     for ind, consumer in enumerate(consumers_params):
         nPhr_tot = (
             (3600 * seconds_consumption.NPs_tot[ind] * _d(consumer.consumer_norms.device_water_consumption_hot_and_cold_q0tot))
@@ -388,6 +415,10 @@ def calculate_multiple_objects_hour_consumption(
         NPhr_hs.append(nPhr_h)
         NPhr_tots.append(nPhr_tot)
 
+        NPhr_tot_0 += nPhr_tot * _d(consumer.consumer_norms.device_water_consumption_hot_and_cold_q0tot_hr)
+        NPhr_hot_0 += nPhr_h * _d(consumer.consumer_norms.device_water_consumption_hot_or_cold_q0_hr)
+        NPhr_cold_0 += nPhr_c * _d(consumer.consumer_norms.device_water_consumption_hot_or_cold_q0_hr)
+
     NPhr_tot_sum = _d(sum(NPhr_tots))
     NPhr_h_sum = _d(sum(NPhr_hs))
     NPhr_c_sum = _d(sum(NPhr_cs))
@@ -395,6 +426,10 @@ def calculate_multiple_objects_hour_consumption(
     alpha_hr_tot = aproximate_alpha(NPhr_tot_sum)
     alpha_hr_h = aproximate_alpha(NPhr_h_sum)
     alpha_hr_c = aproximate_alpha(NPhr_c_sum)
+
+    q0hr_tot = NPhr_tot_0 / NPhr_tot_sum
+    q0hr_c = NPhr_cold_0 / NPhr_c_sum
+    q0hr_h = NPhr_hot_0 / NPhr_h_sum
 
     qhr_tot = _d(0.005) * NPhr_tot_sum * alpha_hr_tot
     qhr_c = _d(0.005) * NPhr_c_sum * alpha_hr_c
@@ -414,12 +449,19 @@ def calculate_multiple_objects_hour_consumption(
         qhr_tot=qhr_tot,
         qhr_c=qhr_c,
         qhr_h=qhr_h,
+        q0hr_tot=q0hr_tot,
+        q0hr_c=q0hr_c,
+        q0hr_h=q0hr_h,
     )
 
 def calculate_multiple_objects_seconds_consumption(consumers_params: list[WaterConsumerParams]):
     NP_tots: list[Decimal] = []
     NP_hs: list[Decimal] = []
     NP_cs: list[Decimal] = []
+
+    NP_tot_0 = 0
+    NP_hot_0 = 0
+    NP_cold_0 = 0
     
     for consumer in consumers_params:
         nP_tot = (
@@ -441,6 +483,10 @@ def calculate_multiple_objects_seconds_consumption(consumers_params: list[WaterC
         NP_cs.append(nP_c)
         NP_hs.append(nP_h)
         NP_tots.append(nP_tot)
+
+        NP_tot_0 += nP_tot * _d(consumer.consumer_norms.device_water_consumption_hot_or_cold_q0)
+        NP_hot_0 += nP_h * _d(consumer.consumer_norms.device_water_consumption_hot_or_cold_q0)
+        NP_cold_0 += nP_c * _d(consumer.consumer_norms.device_water_consumption_hot_or_cold_q0)
     
     NP_tot_sum = _d(sum(NP_tots))
     NP_h_sum = _d(sum(NP_hs))
@@ -450,9 +496,13 @@ def calculate_multiple_objects_seconds_consumption(consumers_params: list[WaterC
     alpha_h = aproximate_alpha(NP_h_sum)
     alpha_c = aproximate_alpha(NP_c_sum)
 
-    q_tot = _d(5) * NP_tot_sum * alpha_tot
-    q_h = _d(5) * NP_h_sum * alpha_h
-    q_c = _d(5) * NP_c_sum * alpha_c
+    q0_tot = NP_tot_0 / NP_tot_sum
+    q0_c = NP_cold_0 / NP_c_sum
+    q0_h = NP_hot_0 / NP_h_sum
+
+    q_tot = _d(5) * q0_tot * alpha_tot
+    q_h = _d(5) * q0_h * alpha_h
+    q_c = _d(5) * q0_c * alpha_c
     
     return MultipleObjectsSecondsConsumptionDataReport(
         consumer_params=consumers_params,
@@ -468,6 +518,9 @@ def calculate_multiple_objects_seconds_consumption(consumers_params: list[WaterC
         q_tot=q_tot,
         q_h=q_h,
         q_c=q_c,
+        q0_tot=q_tot,
+        q0_h=q_h,
+        q0_c=q_c,
     )
 
 

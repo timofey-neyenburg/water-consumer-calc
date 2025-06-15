@@ -8,7 +8,7 @@ from data import ProjectContext
 from mathematics import (
     MultipleObjectsDataReport,
     OneObjectDataReport,
-    WaterConsumerNorms,
+    # WaterConsumerNorms,
     WaterConsumerParams,
     calculate_consumption_for_multiple_objects,
     calculate_consumption_for_one_object,
@@ -16,6 +16,10 @@ from mathematics import (
 )
 
 from settings import CONF, app_logger
+
+
+class StopSignal(Exception):
+    pass
 
 
 def prepare_latex(
@@ -67,6 +71,8 @@ def prepare_latex(
                 os.remove(Path(cwd) / file)
         app_logger.debug("done trash files")
 
+        # raise StopSignal
+
     file_dir = Path(filepath).parent
 
     filename_without_extention = os.path.basename(filepath)
@@ -85,7 +91,8 @@ def prepare_latex(
     else:
         data_report = calculate_consumption_for_one_object(objects[0])
 
-    document_text = build_document_text(data_report)
+    # FIX
+    document_text = build_document_text(data_report, "ХУЙ")
 
     if use_thread:
         threading.Thread(target=_run, args=(document_text,), daemon=True).start()
@@ -115,6 +122,7 @@ def _build_multiple_objects_report(report: MultipleObjectsDataReport, project_na
         + _build_objects_hours_calculation(report)
         + _build_objects_heat_consumption_calculation(report)
         + _build_objects_total_day_calculation(report)
+        + _build_objects_total_result_table(report)
         + _build_document_end()
     )
 
@@ -143,25 +151,424 @@ def _build_one_object_report(report: OneObjectDataReport, project_name: str):
 
 def _build_objects_seconds_calculation(report: MultipleObjectsDataReport) -> str:
     txt = "\\\\ \n"
+    txt += "\\noindent \\\\ \n"
+    txt += "\\section*{\\textbf{Общий секундный расход:}} \\\\ \n"
+    txt += "\\begin{enumerate} \n"
+
+    for ind, consumer_params in enumerate(report.consumers_params):
+        txt += (
+            f"\\item {consumer_params.consumer_norms.name} \\\\ \n"
+            "\\noindent \\\\ \n"
+        )
+        txt += (
+            "$NP^{tot" + str(ind+1) + "} = \\frac{<a> \\cdot <b>}{<c> \\cdot 3600} = <d>$ \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(consumer_params.consumer_norms.max_hot_and_cold_water_norms_per_hour)))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_and_cold_q0tot)))
+            .replace("<d>", str(_r(report.seconds_consumption.NPs_tot[ind])))
+        )
+        txt += (
+            "$NP^{c" + str(ind+1) + "} = \\frac{<a> \\cdot <b>}{<c> \\cdot 3600} = <d>$ \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(consumer_params.consumer_norms.max_hot_and_cold_water_norms_per_hour)))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0)))
+            .replace("<d>", str(_r(report.seconds_consumption.NPs_c[ind])))
+        )
+        txt += (
+            "$NP^{h" + str(ind+1) + "} = \\frac{<a> \\cdot <b>}{<c> \\cdot 3600} = <d>$ \\\\ \n"
+            .replace("<a>", str(_r(consumer_params.consumer_norms.max_hot_and_cold_water_norms_per_hour)))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0)))
+            .replace("<d>", str(_r(report.seconds_consumption.NPs_h[ind])))
+        )
+        txt += "\\\\ \n"
+    txt += "\\end{enumerate}\n"
+
+    txt += "По приложению 4 таблица 2 СНиП 2.04.01-85* находим значение коэффициента $\\alpha$. \\\\ \n"
+    txt += "\\noindent \\\\ \n"
+
+    txt += (
+        "$\\sum{NP^{tot}} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.NPs_tot_sum))
+        .replace("<b>", str(report.seconds_consumption.alpha_tot))
+    )
+    txt += (
+        "$\\sum{NP^{c}} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.NPs_c_sum))
+        .replace("<b>", str(report.seconds_consumption.alpha_c))
+    )
+    txt += (
+        "$\\sum{NP^{h}} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.NPs_h_sum))
+        .replace("<b>", str(report.seconds_consumption.alpha_h))
+    )
+
+    q_formula = "$q_0^{tot} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_and_cold_q0tot} "
+            "\\cdot "
+            f"{report.seconds_consumption.NPs_tot[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.seconds_consumption.NPs_tot_sum}"
+    q_formula += f" = {report.seconds_consumption.q0_tot}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    q_formula = "$q_0^{c} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_or_cold_q0} "
+            "\\cdot "
+            f"{report.seconds_consumption.NPs_c[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.seconds_consumption.NPs_c_sum}"
+    q_formula += f" = {report.seconds_consumption.q0_c}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    q_formula = "$q_0^{h} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_or_cold_q0} "
+            "\\cdot "
+            f"{report.seconds_consumption.NPs_h[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.seconds_consumption.NPs_h_sum}"
+    q_formula += f" = {report.seconds_consumption.q0_h}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    txt += (
+        "q^{tot} = 5 \\cdot <a> \\cdot <b> = <c>$, л/с \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.q0_tot))
+        .replace("<b>", str(report.seconds_consumption.alpha_tot))
+        .replace("<c>", str(report.seconds_consumption.q0_tot))
+    )
+    txt += (
+        "q^{c} = 5 \\cdot <a> \\cdot <b> = <c>$, л/с \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.q0_c))
+        .replace("<b>", str(report.seconds_consumption.alpha_c))
+        .replace("<c>", str(report.seconds_consumption.q0_c))
+    )
+    txt += (
+        "q^{h} = 5 \\cdot <a> \\cdot <b> = <c>$, л/с \\\\ \n"
+        .replace("<a>", str(report.seconds_consumption.q0_h))
+        .replace("<b>", str(report.seconds_consumption.alpha_h))
+        .replace("<c>", str(report.seconds_consumption.q0_h))
+    )
 
     return txt
 
 
 def _build_objects_hours_calculation(report: MultipleObjectsDataReport) -> str:
     txt = "\\\\ \n"
+    txt += "\\noindent \\\\ \n"
+    txt += "\\section*{\\textbf{Общий часовой расход:}} \\\\ \n"
+    txt += "\\begin{enumerate} \n"
 
-    return txt
+    for ind, consumer_params in enumerate(report.consumers_params):
+        txt += (
+            f"\\item {consumer_params.consumer_norms.name} \\\\ \n"
+            "\\noindent \\\\ \n"
+        )
+        txt += (
+            "$NP^{tot" + str(ind+1) + "}_hr = 3600 \\cdot <a> \\cdot <b> / <c> = <d> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(report.seconds_consumption.NPs_tot[ind])))
+            .replace("<b>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_and_cold_q0tot)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_and_cold_q0tot_hr)))
+            .replace("<d>", str(_r(report.hours_consumption.NPhrs_tot[ind])))
+        )
+        txt += (
+            "$NP^{c" + str(ind+1) + "}_hr = 3600 \\cdot <a> \\cdot <b> / <c> = <d> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(report.seconds_consumption.NPs_c[ind])))
+            .replace("<b>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0_hr)))
+            .replace("<d>", str(_r(report.hours_consumption.NPhrs_c[ind])))
+        )
+        txt += (
+            "$NP^{h" + str(ind+1) + "}_hr = 3600 \\cdot <a> \\cdot <b> / <c> = <d> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(report.seconds_consumption.NPs_h[ind])))
+            .replace("<b>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0)))
+            .replace("<c>", str(_r(consumer_params.consumer_norms.device_water_consumption_hot_or_cold_q0_hr)))
+            .replace("<d>", str(_r(report.hours_consumption.NPhrs_h[ind])))
+        )
+        txt += "\\\\ \n"
+    txt += "\\end{enumerate}\n"
 
-def _build_objects_heat_consumption_calculation(report: MultipleObjectsDataReport) -> str:
-    txt = "\\\\ \n"
+    txt += "По приложению 4 таблица 2 СНиП 2.04.01-85* находим значение коэффициента $\\alpha$. \\\\ \n"
+    txt += "\\noindent \\\\ \n"
+
+    txt += (
+        "$\\sum{NP^{tot}_hr} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.NPhrs_tot_sum))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_tot))
+    )
+    txt += (
+        "$\\sum{NP^{c}_hr} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.NPhrs_c_sum))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_c))
+    )
+    txt += (
+        "$\\sum{NP^{h}_hr} = <a> \\rightarrow \\alpha = <b>$ \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.NPhrs_h_sum))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_h))
+    )
+
+    q_formula = "$q_0^{tot} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_and_cold_q0tot_hr} "
+            "\\cdot "
+            f"{report.hours_consumption.NPhrs_tot[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.hours_consumption.NPhrs_tot_sum}"
+    q_formula += f" = {report.hours_consumption.q0hr_tot}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    q_formula = "$q_0^{c} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_or_cold_q0_hr} "
+            "\\cdot "
+            f"{report.hours_consumption.NPhrs_c[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.hours_consumption.NPhrs_c_sum}"
+    q_formula += f" = {report.hours_consumption.q0hr_c}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    q_formula = "$q_0^{h} = ("
+    for ind, cp in enumerate(report.consumers_params):
+        q_formula += (
+            f"{cp.consumer_norms.device_water_consumption_hot_or_cold_q0_hr} "
+            "\\cdot "
+            f"{report.hours_consumption.NPhrs_h[ind]}"
+        )
+        if ind == len(report.consumers_params) - 1:
+            q_formula += " + "
+    q_formula += ")$"
+    q_formula += f" / {report.hours_consumption.NPhrs_h_sum}"
+    q_formula += f" = {report.hours_consumption.q0hr_h}"
+    q_formula += " \\\\ \n"
+    txt += q_formula
+
+    txt += (
+        "q^{tot} = 0.005 \\cdot <a> \\cdot <b> = <c>$, м^3/ч \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.q0hr_tot))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_tot))
+        .replace("<c>", str(report.hours_consumption.qhr_tot))
+    )
+    txt += (
+        "q^{c} = 0.005 \\cdot <a> \\cdot <b> = <c>$, м^3/ч \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.q0hr_c))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_c))
+        .replace("<c>", str(report.hours_consumption.qhr_c))
+    )
+    txt += (
+        "q^{h} = 0.005 \\cdot <a> \\cdot <b> = <c>$, м^3/ч \\\\ \n"
+        .replace("<a>", str(report.hours_consumption.q0hr_h))
+        .replace("<b>", str(report.hours_consumption.alpha_hr_h))
+        .replace("<c>", str(report.hours_consumption.qhr_h))
+    )
 
     return txt
 
 
 def _build_objects_total_day_calculation(report: MultipleObjectsDataReport) -> str:
     txt = "\\\\ \n"
+    txt += "\\noindent \\\\ \n"
+    txt += "\\section*{\\textbf{Общий суточный расход:}} \\\\ \n"
+    txt += "\\begin{enumerate} \n"
+
+    for ind, consumer_params in enumerate(report.consumers_params):
+        txt += (
+            f"\\item {consumer_params.consumer_norms.name} \\\\ \n"
+            "\\noindent \\\\ \n"
+        )
+        txt += (
+            "$Q^{tot" + str(ind+1) + "}_u = <a> \\cdot <b> / 1000 = <c> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(consumer_params.consumer_norms.avg_hot_and_cold_water_norms_per_day)))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(report.day_consumption.Qu_tots[ind])))
+        )
+        txt += (
+            "$Q^{c" + str(ind+1) + "}_u = <a> \\cdot <b> / 1000 = <c> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(_r(consumer_params.consumer_norms.avg_hot_water_norms_per_day)))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(report.day_consumption.Qu_cs[ind])))
+        )
+        txt += (
+            "$Q^{h" + str(ind+1) + "}_u = <a> \\cdot <b> / 1000 = <c> \\\\ \n"
+            # FIX TODO CHECK
+            .replace("<a>", str(
+                _d(consumer_params.consumer_norms.avg_hot_and_cold_water_norms_per_day) 
+                - _d(consumer_params.consumer_norms.avg_hot_water_norms_per_day)
+            ))
+            .replace("<b>", str(_r(consumer_params.num_of_measurers)))
+            .replace("<c>", str(_r(report.day_consumption.Qu_hs[ind])))
+        )
+        txt += "\\\\ \n"
+    txt += (
+        "$\\sum{Q_u^{tot}} = <a>, м^3/сут$ \\\\ \n"
+        .replace("<a>", str(report.day_consumption.Qu_total))
+    )    
+    txt += (
+        "$\\sum{Q_u^{c}} = <a>, м^3/сут$ \\\\ \n"
+        .replace("<a>", str(report.day_consumption.Qu_cold))
+    )    
+    txt += (
+        "$\\sum{Q_u^{h}} = <a>, м^3/сут$ \\\\ \n"
+        .replace("<a>", str(report.day_consumption.Qu_hot))
+    )    
+
+    txt += "\\end{enumerate}\n"
+    return txt
+
+
+def _build_objects_heat_consumption_calculation(report: MultipleObjectsDataReport) -> str:
+    txt = "\\\\ \n"
+    txt += """
+\\section*{\\textbf{Расход тепла}} \\\\ \n
+Расход тепла QTh  (Qhhr), кВт, на приготовление горячей воды с учетом потерь тепла подающими и циркуляционными трубопроводами Qht следует определять \\\\ \n
+\\noindent \n
+а) в течение среднего часа  \\\\ \n
+$Q^h_T = 1,16 \\cdot q^h_T \\cdot (t^h - t^c) + Q^{ht}$; \\\\ \n
+\\noindent \n
+б) в течение часа максимального водопотребления
+$Q^h_{hr} = 1,16 \\cdot q^h_{hr} \\cdot (t^h - t^c) + Q^{ht}$; \\\\ \n
+"""
+    txt += "\\noindent \n"
+    txt += "\\\\ \n"
+    txt += (
+        "$Q^h_T = 1,16 \\cdot <a> \\cdot (<b> - <c>) + <d> = <e>$; \\\\ \n"
+        .replace("<a>", str(_r(report.day_consumption.Qu_hot)))
+        # TODO: MAGIC NUMBER
+        .replace("<b>", str(_r(61)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(5)))
+        .replace("<d>", str(_r(report.hours_consumption.qhr_h* _d(0.3))))
+        .replace("<e>", str(_r(report.heat_consumption.Q_avg_hour)))
+    )
+    txt += (
+        "$Q^h_{hr} = 1,16 \\cdot <a> \\cdot (<b> - <c>) + <d> = <e>$; \\\\ \n"
+        .replace("<a>", str(_r(report.hours_consumption.qhr_h* _d(0.3))))
+        # TODO: MAGIC NUMBER
+        .replace("<b>", str(_r(61)))
+        # TODO: MAGIC NUMBER
+        .replace("<c>", str(_r(5)))
+        .replace("<d>", str(_r(report.hours_consumption.qhr_h* _d(0.3))))
+        .replace("<e>", str(_r(report.heat_consumption.Q_max_hour)))
+    )
+
+    txt += "\\\\ \n"
 
     return txt
+
+
+def _build_objects_total_result_table(report: MultipleObjectsDataReport) -> str:
+    table = """
+\\\\ \n
+\\begin{table}[h]
+\\begin{tabular}{|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|m{1cm}|}
+\\hline
+    \\multicolumn{1}{|p{3cm}|}{
+        \\multirow{3}{3cm}{Наименование системы}
+    } &
+    \\multicolumn{9}{|p{9cm}|}{Расчетный расход} \\\\
+\\cline{2-10}
+    \\multicolumn{1}{|p{3cm}|}{} & 
+    \\multicolumn{3}{|p{3cm}|}{Общий расход воды} &
+    \\multicolumn{3}{|p{3cm}|}{Расход холодной воды} &
+    \\multicolumn{3}{|p{3cm}|}{Расход горячей воды} \\\\
+\\cline{2-10}
+    \\multicolumn{1}{|p{3cm}|}{} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/сут} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/ч} & 
+    \\multicolumn{1}{|p{1cm}|}{л/с} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/сут} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/ч} & 
+    \\multicolumn{1}{|p{1cm}|}{л/с} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/сут} & 
+    \\multicolumn{1}{|p{1cm}|}{м3/ч} & 
+    \\multicolumn{1}{|p{1cm}|}{л/с}  \\\\
+\\hline
+"""
+    table_end = """
+\\end{tabular}
+\\end{table}
+"""
+
+    table_row_template = """
+\\multicolumn{1}{|p{3cm}|}{<z>} & 
+\\multicolumn{1}{|p{1cm}|}{<a>} & 
+\\multicolumn{1}{|p{1cm}|}{<b>} & 
+\\multicolumn{1}{|p{1cm}|}{<c>} & 
+\\multicolumn{1}{|p{1cm}|}{<d>} & 
+\\multicolumn{1}{|p{1cm}|}{<e>} & 
+\\multicolumn{1}{|p{1cm}|}{<f>} & 
+\\multicolumn{1}{|p{1cm}|}{<g>} & 
+\\multicolumn{1}{|p{1cm}|}{<h>} & 
+\\multicolumn{1}{|p{1cm}|}{<i>} \\\\
+\\hline
+"""
+
+    table += (
+        table_row_template
+        .replace("<z>", "Хозяйственно-питьевой водопровод")
+        .replace("<a>", str(_r(report.day_consumption.Qu_total)))
+        .replace("<b>", str(_r(report.hours_consumption.qhr_tot)))
+        .replace("<c>", str(_r(report.seconds_consumption.q_tot)))
+        .replace("<d>", str(_r(report.day_consumption.Qu_hot)))
+        .replace("<e>", str(_r(report.hours_consumption.qhr_h)))
+        .replace("<f>", str(_r(report.seconds_consumption.q_h)))
+        .replace("<g>", str(_r(report.day_consumption.Qu_cold)))
+        .replace("<h>", str(_r(report.hours_consumption.qhr_c)))
+        .replace("<i>", str(_r(report.seconds_consumption.q_c)))
+    )
+
+    table += (
+        table_row_template
+        .replace("<z>", "Бытовая канализация")
+        .replace("<a>", str(_r(report.day_consumption.Qu_total)))
+        .replace("<b>", str(_r(report.hours_consumption.qhr_tot)))
+        .replace("<c>", "")
+        .replace("<d>", "")
+        .replace("<e>", "")
+        .replace("<f>", "")
+        .replace("<g>", "")
+        .replace("<h>", "")
+        .replace("<i>", "")
+    )
+
+    table += table_end
+
+    table += "\\\\ \n"
+
+    return table
 
 
 def _build_one_object_total_day_calculation(report: OneObjectDataReport) -> str:
