@@ -1,0 +1,27 @@
+{
+    "path": "C:/Users/neyen/OneDrive/\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b/\u043f\u0430\u043f\u043a\u0438/8 \u0441\u0435\u043c\u0435\u0441\u0442\u0440/\u0434\u0438\u043f\u043b\u043e\u043c/diploma/one_obj.wcp",
+    "last_var_num": 1,
+    "vars": [
+        "\u0432\u0430\u0440\u0438\u0430\u043d\u0442_1"
+    ],
+    "opened_tabs_tags": {
+        "var_win_\u0432\u0430\u0440\u0438\u0430\u043d\u0442_1": 62
+    },
+    "variants_data": {
+        "tab_var_win_\u0432\u0430\u0440\u0438\u0430\u043d\u0442_1": {
+            "objects": [
+                {
+                    "id": "51467054-474b-43b4-a433-a2fffcd36343",
+                    "name": "23 \u0411\u0430\u043d\u0438: \u0434\u0443\u0448\u0435\u0432\u0430\u044f \u043a\u0430\u0431\u0438\u043d\u0430",
+                    "num_of_measurers": 12,
+                    "are_there_devices_less_then_200": false,
+                    "num_of_devices": 15,
+                    "num_of_devices_hot": 10,
+                    "temp_hot": 61,
+                    "temp_cold": 5,
+                    "work_hours": 12
+                }
+            ]
+        }
+    }
+}
